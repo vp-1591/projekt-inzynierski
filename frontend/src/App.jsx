@@ -119,14 +119,7 @@ function App() {
         )}
       </main>
 
-      <footer style={{ 
-        textAlign: 'center', 
-        fontSize: '0.875rem', 
-        color: 'var(--text-secondary)',
-        paddingBottom: '2rem'
-      }}>
-        Powered by MockAI Protocol
-      </footer>
+
       
       <style>{`
         @keyframes fadeIn {

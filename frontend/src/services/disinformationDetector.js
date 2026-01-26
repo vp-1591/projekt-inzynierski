@@ -3,7 +3,7 @@
  */
 
 const OLLAMA_URL = 'http://localhost:11434/api/chat';
-const MODEL_NAME = 'bielik-local:latest';
+const MODEL_NAME = 'bielik-lora-mipd:latest';
 
 // Mapping model tags to user-friendly Polish names and descriptions
 const TECHNIQUE_MAPPING = {
@@ -98,8 +98,7 @@ export async function analyzeText(text) {
       return {
         id: `${tag}-${index}-${Date.now()}`,
         technique_name: info.name,
-        description: info.description,
-        confidence_score: 0.95 // Default high confidence for detected items
+        description: info.description
       };
     });
 

@@ -1,13 +1,10 @@
 FROM ./Bielik-4.5B-v3.0-Instruct.Q8_0.gguf
+ADAPTER ./checkpoint-2686/checkpoint-2686-F32-LoRA.gguf
 
 # 2. Parameters
-# Low temperature is better for classification/extraction tasks
-PARAMETER temperature 0.1
-# Stop token to prevent the model from rambling
+PARAMETER temperature 0.0
 PARAMETER stop "<|im_end|>"
-# Context window (Increase this if you analyze long articles)
-# Default is 2048. Bielik supports more, but higher usage = more RAM.
-PARAMETER num_ctx 8192
+PARAMETER num_ctx 16384
 
 # 3. ChatML Template (CRITICAL for Bielik)
 # This format ensures the model understands System/User/Assistant roles

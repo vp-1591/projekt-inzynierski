@@ -1,0 +1,21 @@
+
+============================================================
+INFERENCE REPORT: 1521 documents
+============================================================
+
+Global Average F1 Score: 0.5544
+
+--- Sample Results (First 10) ---
+F1 Score   | Ground Truth                   | Predicted                     
+--------------------------------------------------------------------------------
+1.0000     | []                             | []                            
+1.0000     | []                             | []                            
+1.0000     | []                             | []                            
+0.0000     | ['REFERENCE_ERROR']            | []                            
+0.1111     | ['REFERENCE_ERROR', 'EMOTIO..  | ['WHATABOUTISM', 'STRAWMAN'.. 
+0.0000     | []                             | ['CHERRY_PICKING', 'EMOTION.. 
+1.0000     | []                             | []                            
+0.1111     | ['REFERENCE_ERROR', 'EMOTIO..  | ['CHERRY_PICKING', 'STRAWMA.. 
+0.0000     | []                             | ['WHATABOUTISM', 'CHERRY_PI.. 
+0.0000     | []                             | ['CHERRY_PICKING', 'LEADING.. 
+--------------------------------------------------------------------------------
