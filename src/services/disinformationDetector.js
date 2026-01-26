@@ -1,39 +1,57 @@
 /**
- * Service to handle disinformation detection analysis.
- * Currently uses a mock implementation to simulate AI processing.
+ * Service to handle disinformation detection analysis using local Ollama instance.
  */
 
-// Mock data to simulate varied results
-const MOCK_TECHNIQUES = [
-  {
-    id: 'tech-1',
-    technique_name: 'Ad Hominem',
-    description: 'Atakowanie osoby wyrażającej pogląd zamiast merytorycznego odniesienia się do argumentu.',
-    confidence_score: 0.92,
-    raw_data: { original_label: 'ad_hominem', intensity: 'high' }
+const OLLAMA_URL = 'http://localhost:11434/api/chat';
+const MODEL_NAME = 'bielik-local:latest';
+
+// Mapping model tags to user-friendly Polish names and descriptions
+const TECHNIQUE_MAPPING = {
+  'REFERENCE_ERROR': {
+    name: 'Błąd źródłowy',
+    description: 'Powoływanie się na nieistniejące, niewiarygodne lub błędnie zinterpretowane źródła.'
   },
-  {
-    id: 'tech-2',
-    technique_name: 'Fałszywy Dylemat',
-    description: 'Przedstawianie sytuacji jako wyboru tylko między dwiema opcjami, podczas gdy istnieje ich więcej.',
-    confidence_score: 0.85,
-    raw_data: { original_label: 'false_dilemma' }
+  'WHATABOUTISM': {
+    name: 'Whataboutism',
+    description: 'Odwracanie uwagi od argumentu poprzez wytykanie oponentowi innych przewinień.'
   },
-  {
-    id: 'tech-3',
-    technique_name: 'Język Emocjonalny',
-    description: 'Używanie silnie nacechowanych słów w celu wywołania emocji i zaburzenia racjonalnej oceny.',
-    confidence_score: 0.88,
-    raw_data: { original_label: 'emotional_language', keywords: ['szokujące', 'skandal'] }
+  'STRAWMAN': {
+    name: 'Chochoł (Słomiana kukła)',
+    description: 'Atakowanie zniekształconej, uproszczonej wersji argumentu przeciwnika.'
   },
-  {
-    id: 'tech-4',
-    technique_name: 'Co słychać u...',
-    description: 'Odwracanie uwagi od tematu poprzez oskarżanie oponenta o podobne lub gorsze przewinienia.',
-    confidence_score: 0.75,
-    raw_data: { original_label: 'whataboutism' }
+  'EMOTIONAL_CONTENT': {
+    name: 'Język emocjonalny',
+    description: 'Używanie słów nacechowanych emocjonalnie, by wpłynąć na ocenę odbiorcy.'
+  },
+  'CHERRY_PICKING': {
+    name: 'Dowody anegdotyczne (Wybiórczość)',
+    description: 'Wybieranie tylko tych faktów, które pasują do z góry założonej tezy.'
+  },
+  'FALSE_CAUSE': {
+    name: 'Fałszywa przyczyna',
+    description: 'Sugerowanie związku przyczynowo-skutkowego tam, gdzie on nie występuje.'
+  },
+  'MISLEADING_CLICKBAIT': {
+    name: 'Clickbait / Manipulacja tytułem',
+    description: 'Tytuł wprowadzający w błąd lub niewspółmierny do treści artykułu.'
+  },
+  'ANECDOTE': {
+    name: 'Dowód anegdotyczny',
+    description: 'Opieranie argumentacji na pojedynczych, niepotwierdzonych historiach.'
+  },
+  'LEADING_QUESTIONS': {
+    name: 'Pytania sugerujące',
+    description: 'Formułowanie pytań w sposób, który narzuca konkretną odpowiedź.'
+  },
+  'EXAGGERATION': {
+    name: 'Wyolbrzymienie',
+    description: 'Przedstawianie faktów w sposób przesadny, by nadać im większą wagę.'
+  },
+  'QUOTE_MINING': {
+    name: 'Wyrywanie z kontekstu',
+    description: 'Używanie autentycznych cytatów w sposób wypaczający ich oryginalny sens.'
   }
-];
+};
 
 /**
  * Analyzes the provided text for disinformation techniques.
@@ -41,18 +59,52 @@ const MOCK_TECHNIQUES = [
  * @returns {Promise<Array>} - A promise resolving to an array of detected techniques.
  */
 export async function analyzeText(text) {
-  return new Promise((resolve) => {
-    // Simulate network delay (1.5 - 3 seconds)
-    const delay = 1500 + Math.random() * 1500;
+  try {
+    const response = await fetch(OLLAMA_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        messages: [
+          {
+            role: 'user',
+            content: text
+          }
+        ],
+        stream: false,
+        format: 'json'
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const content = JSON.parse(data.message.content);
     
-    setTimeout(() => {
-      // Logic to return random subset of techniques for variety
-      // In real implementation, this would call the Ollama endpoint
+    // Model returns: { "discovered_techniques": ["TAG1", "TAG2"] }
+    const tags = content.discovered_techniques || [];
+
+    // Map tags to the format expected by the UI
+    return tags.map((tag, index) => {
+      const info = TECHNIQUE_MAPPING[tag] || { 
+        name: tag, 
+        description: 'Wykryto technikę manipulacji.' 
+      };
       
-      const shuffled = [...MOCK_TECHNIQUES].sort(() => 0.5 - Math.random());
-      const selected = shuffled.slice(0, Math.floor(Math.random() * 3) + 1); // Return 1 to 3 items
-      
-      resolve(selected);
-    }, delay);
-  });
+      return {
+        id: `${tag}-${index}-${Date.now()}`,
+        technique_name: info.name,
+        description: info.description,
+        confidence_score: 0.95 // Default high confidence for detected items
+      };
+    });
+
+  } catch (error) {
+    console.error("Analysis request failed:", error);
+    throw error;
+  }
 }

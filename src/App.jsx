@@ -7,15 +7,17 @@ import { analyzeText } from './services/disinformationDetector'
 function App() {
   const [results, setResults] = useState(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [error, setError] = useState(null)
 
   const handleAnalyze = async (text) => {
     setIsAnalyzing(true)
+    setError(null)
     try {
       const data = await analyzeText(text)
       setResults(data)
     } catch (error) {
       console.error("Analysis failed", error)
-      // Optional: Handle error state
+      setError("Nie udało się połączyć z modelem AI. Upewnij się, że Ollama (bielik-local) jest uruchomiona.")
     } finally {
       setIsAnalyzing(false)
     }
@@ -23,6 +25,7 @@ function App() {
 
   const handleReset = () => {
     setResults(null)
+    setError(null)
   }
 
   return (
@@ -53,6 +56,20 @@ function App() {
       </header>
       
       <main style={{ flex: 1, width: '100%' }}>
+        {error && (
+          <div style={{ 
+            padding: '1rem', 
+            backgroundColor: '#ef444420', 
+            color: '#ef4444', 
+            borderRadius: '8px', 
+            marginBottom: '2rem',
+            border: '1px solid #ef444440',
+            textAlign: 'center'
+          }}>
+            {error}
+          </div>
+        )}
+        
         {!results ? (
           <div style={{ animation: 'fadeIn 0.5s ease-out' }}>
             <InputSection onAnalyze={handleAnalyze} isAnalyzing={isAnalyzing} />
