@@ -4,7 +4,7 @@ ADAPTER ./checkpoint-2686/checkpoint-2686-F32-LoRA.gguf
 # 2. Parameters
 PARAMETER temperature 0.0
 PARAMETER stop "<|im_end|>"
-PARAMETER num_ctx 16384
+PARAMETER num_ctx 2048
 
 # 3. ChatML Template (CRITICAL for Bielik)
 # This format ensures the model understands System/User/Assistant roles

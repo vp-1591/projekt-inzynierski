@@ -1,136 +1,219 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import './index.css'
 import { InputSection } from './components/InputSection'
-import { ResultCard } from './components/ResultCard'
 import { analyzeText } from './services/disinformationDetector'
 
 function App() {
   const [results, setResults] = useState(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [error, setError] = useState(null)
+  const [showExpertMode, setShowExpertMode] = useState(false)
+  const [trainingStatus, setTrainingStatus] = useState({
+    status: 'idle',
+    training_progress: 0,
+    evaluation_progress: 0,
+    baseline_f1: 0,
+    new_f1: 0
+  });
+
+  const pollInterval = useRef(null);
+
+  useEffect(() => {
+    if (showExpertMode) {
+      pollInterval.current = setInterval(async () => {
+        try {
+          const response = await fetch('http://localhost:8000/training/status');
+          const data = await response.json();
+          setTrainingStatus(data);
+        } catch (err) {
+          console.error("Failed to poll status", err);
+        }
+      }, 2000);
+    } else {
+      if (pollInterval.current) clearInterval(pollInterval.current);
+    }
+    return () => {
+      if (pollInterval.current) clearInterval(pollInterval.current);
+    };
+  }, [showExpertMode]);
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('http://localhost:8000/training/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (response.ok) {
+        alert("Pomyślnie rozpoczęto trening!");
+      } else {
+        const errorData = await response.json();
+        alert("Błąd: " + (errorData.detail || "Nieznany błąd"));
+      }
+    } catch (err) {
+      alert("Błąd połączenia: " + err.message);
+    }
+  };
+
+  const handlePromote = async () => {
+    if (trainingStatus.new_f1 < trainingStatus.baseline_f1) {
+      if (!window.confirm("Ostrzeżenie: Nowy model ma niższe F1 score niż bazowy. Czy na pewno chcesz go wdrożyć?")) {
+        return;
+      }
+    }
+    
+    try {
+      const response = await fetch('http://localhost:8000/training/promote', { method: 'POST' });
+      if (response.ok) {
+        alert("Model został pomyślnie podmieniony!");
+      }
+    } catch (err) {
+      alert("Błąd awansu modelu: " + err.message);
+    }
+  };
 
   const handleAnalyze = async (text) => {
-    setIsAnalyzing(true)
-    setError(null)
+    setIsAnalyzing(true);
+    setError(null);
     try {
-      const data = await analyzeText(text)
-      setResults(data)
-    } catch (error) {
-      console.error("Analysis failed", error)
-      setError("Nie udało się połączyć z modelem AI. Upewnij się, że Ollama (bielik-local) jest uruchomiona.")
+      const data = await analyzeText(text);
+      setResults(data);
+    } catch (err) {
+      setError(err.message);
     } finally {
-      setIsAnalyzing(false)
+      setIsAnalyzing(false);
     }
-  }
-
-  const handleReset = () => {
-    setResults(null)
-    setError(null)
-  }
+  };
 
   return (
-    <div style={{ 
-      maxWidth: '800px', 
-      margin: '0 auto', 
-      padding: '2rem 1rem',
-      minHeight: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '3rem'
-    }}>
-      <header style={{ textAlign: 'center', marginTop: '2rem', transition: 'all 0.5s ease' }}>
-        <h1 style={{ 
-          fontSize: '2.5rem', 
-          fontWeight: '300', 
-          letterSpacing: '-0.02em',
-          background: 'linear-gradient(to right, #fff, #a3a3a3)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          marginBottom: '0.5rem'
-        }}>
-          Detektor Dezinformacji
-        </h1>
-        <p style={{ color: 'var(--text-secondary)' }}>
-          Analiza treści z wykorzystaniem AI
-        </p>
-      </header>
-      
-      <main style={{ flex: 1, width: '100%' }}>
-        {error && (
-          <div style={{ 
-            padding: '1rem', 
-            backgroundColor: '#ef444420', 
-            color: '#ef4444', 
-            borderRadius: '8px', 
-            marginBottom: '2rem',
-            border: '1px solid #ef444440',
-            textAlign: 'center'
-          }}>
-            {error}
+    <div className="app-container">
+      {showExpertMode && (
+        <aside className="expert-sidebar">
+          <div className="sidebar-header">
+            <h2>Panel Ekspercki</h2>
           </div>
-        )}
-        
-        {!results ? (
-          <div style={{ animation: 'fadeIn 0.5s ease-out' }}>
-            <InputSection onAnalyze={handleAnalyze} isAnalyzing={isAnalyzing} />
-          </div>
-        ) : (
-          <div style={{ animation: 'slideUp 0.5s ease-out' }}>
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center', 
-              marginBottom: '2rem' 
-            }}>
-              <h2 style={{ fontSize: '1.5rem', fontWeight: '500' }}>Wyniki Analizy</h2>
-              <button 
-                onClick={handleReset}
-                style={{
-                  color: 'var(--text-secondary)',
-                  fontSize: '0.9rem',
-                  padding: '0.5rem 1rem',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '8px',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.borderColor = 'var(--text-primary)';
-                  e.target.style.color = 'var(--text-primary)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.borderColor = 'var(--border-subtle)';
-                  e.target.style.color = 'var(--text-secondary)';
-                }}
-              >
-                Nowa Analiza
-              </button>
+          
+          <div className="sidebar-content">
+            <div className="field-group">
+              <label>Dataset (JSONL)</label>
+              <div className="file-input-wrapper">
+                <input type="file" onChange={handleFileUpload} />
+              </div>
             </div>
-            
-            {results.length > 0 ? (
-              results.map((item) => (
-                <ResultCard key={item.id} result={item} />
-              ))
-            ) : (
-              <p style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '2rem' }}>
-                Nie wykryto znanych technik manipulacji.
-              </p>
-            )}
+
+            <div className="progress-section">
+              <div className="progress-info">
+                <span>Postęp treningu</span>
+                <span>{trainingStatus.training_progress}%</span>
+              </div>
+              <div className="progress-bar">
+                <div 
+                  className="progress-fill" 
+                  style={{ width: `${trainingStatus.training_progress}%` }}
+                ></div>
+              </div>
+            </div>
+
+            <div className="progress-section">
+              <div className="progress-info">
+                <span>Ewaluacja</span>
+                <span>{trainingStatus.evaluation_progress}%</span>
+              </div>
+              <div className="progress-bar">
+                <div 
+                  className="progress-fill" 
+                  style={{ width: `${trainingStatus.evaluation_progress}%` }}
+                ></div>
+              </div>
+            </div>
+
+            <div className="stats-grid">
+              <div className="stat-card">
+                <span className="label">Baseline F1</span>
+                <span className="value">{trainingStatus.baseline_f1.toFixed(4)}</span>
+              </div>
+              <div className="stat-card">
+                <span className="label">Nowy F1</span>
+                <span className={`value ${trainingStatus.new_f1 >= trainingStatus.baseline_f1 ? 'positive' : ''}`}>
+                  {trainingStatus.new_f1.toFixed(4)}
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={handlePromote}
+              disabled={trainingStatus.status !== 'ready_to_promote'}
+              className="promote-button"
+            >
+              Wdróż model
+            </button>
           </div>
-        )}
+        </aside>
+      )}
+
+      <main className="main-content">
+        <header className="main-header">
+          <div className="brand-text">
+            <h1>Detektor Dezinformacji</h1>
+            <p>Analiza treści z wykorzystaniem AI</p>
+          </div>
+          
+          <div className="expert-toggle">
+            <span>Tryb ekspercki</span>
+            <button 
+              onClick={() => setShowExpertMode(!showExpertMode)}
+              className={`toggle-switch ${showExpertMode ? 'on' : 'off'}`}
+            >
+              <div className="handle" />
+            </button>
+          </div>
+        </header>
+
+        <div className="content-wrapper">
+          <section className="analyze-section">
+            <InputSection onAnalyze={handleAnalyze} isLoading={isAnalyzing} />
+          </section>
+
+          {error && (
+            <div className="error-message">
+              {error}
+            </div>
+          )}
+
+          <section className="results-container">
+            {results && (
+              <div className="analysis-results">
+                <div className="labels-list">
+                  {results.techniques.map((tech, index) => (
+                    <span key={index} className="tech-badge">{tech}</span>
+                  ))}
+                </div>
+                
+                <div className="reasoning-block">
+                  <p className="reasoning-text">{results.reasoning}</p>
+                </div>
+              </div>
+            )}
+            
+            {!isAnalyzing && !results && !error && (
+              <div className="placeholder">
+                <p>Wprowadź tekst do analizy...</p>
+              </div>
+            )}
+            
+            {results && results.techniques.length === 0 && !isAnalyzing && (
+              <div className="placeholder">
+                <p>Nie wykryto technik manipulacji.</p>
+              </div>
+            )}
+          </section>
+        </div>
       </main>
-
-
-      
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </div>
   )
 }

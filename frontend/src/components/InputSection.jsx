@@ -34,7 +34,7 @@ export function InputSection({ onAnalyze, isAnalyzing }) {
             boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
           }}
           onFocus={(e) => {
-            e.target.style.borderColor = 'var(--text-accent)';
+            e.target.style.borderColor = 'var(--accent-blue)';
             e.target.style.boxShadow = '0 0 0 2px rgba(59, 130, 246, 0.1)';
           }}
           onBlur={(e) => {
@@ -50,8 +50,8 @@ export function InputSection({ onAnalyze, isAnalyzing }) {
         style={{
           alignSelf: 'center',
           padding: '1rem 3rem',
-          backgroundColor: text.trim() ? 'var(--text-primary)' : 'var(--bg-card)',
-          color: text.trim() ? 'var(--bg-primary)' : 'var(--text-secondary)',
+          backgroundColor: text.trim() ? 'var(--accent-blue)' : 'var(--bg-card)',
+          color: 'white',
           borderRadius: '9999px',
           fontWeight: '600',
           fontSize: '1rem',

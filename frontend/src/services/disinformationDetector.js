@@ -2,8 +2,8 @@
  * Service to handle disinformation detection analysis using local Ollama instance.
  */
 
-const OLLAMA_URL = 'http://localhost:11434/api/chat';
-const MODEL_NAME = 'bielik-lora-mipd:latest';
+const BACKEND_URL = 'http://localhost:8000/analyze';
+const FEEDBACK_URL = 'http://localhost:8000/feedback';
 
 // Mapping model tags to user-friendly Polish names and descriptions
 const TECHNIQUE_MAPPING = {
@@ -60,50 +60,48 @@ const TECHNIQUE_MAPPING = {
  */
 export async function analyzeText(text) {
   try {
-    const response = await fetch(OLLAMA_URL, {
+    const response = await fetch(BACKEND_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: MODEL_NAME,
-        messages: [
-          {
-            role: 'user',
-            content: text
-          }
-        ],
-        stream: false,
-        format: 'json'
-      }),
+      body: JSON.stringify({ text }),
     });
 
     if (!response.ok) {
-      throw new Error(`Ollama API error: ${response.statusText}`);
+      throw new Error(`Backend error: ${response.statusText}`);
     }
 
     const data = await response.json();
-    const content = JSON.parse(data.message.content);
     
     // Model returns: { "discovered_techniques": ["TAG1", "TAG2"] }
-    const tags = content.discovered_techniques || [];
+    const tags = data.discovered_techniques || [];
 
-    // Map tags to the format expected by the UI
-    return tags.map((tag, index) => {
-      const info = TECHNIQUE_MAPPING[tag] || { 
-        name: tag, 
-        description: 'Wykryto technikę manipulacji.' 
-      };
-      
-      return {
-        id: `${tag}-${index}-${Date.now()}`,
-        technique_name: info.name,
-        description: info.description
-      };
+    // Map tags to user-friendly names
+    const techniques = tags.map(tag => {
+      const info = TECHNIQUE_MAPPING[tag] || { name: tag };
+      return info.name;
     });
+
+    return {
+      techniques: techniques,
+      reasoning: "model reasoning goes here" // Single reasoning for all labels
+    };
 
   } catch (error) {
     console.error("Analysis request failed:", error);
     throw error;
   }
+}
+
+/**
+ * Submits expert feedback to the backend.
+ */
+export async function submitFeedback(feedback) {
+  const response = await fetch(FEEDBACK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(feedback),
+  });
+  return response.json();
 }
