@@ -92,27 +92,6 @@ class MLOpsOrchestrator:
 
         threading.Thread(target=mock_eval).start()
 
-    def export_training_data(self):
-        # Combine Golden Samples with Replay Buffer
-        samples = self.db.query(database.GoldenSample).all()
-        
-        # Export to JSONL (Alpaca/ChatML format)
-        export_path = os.path.join(os.getcwd(), "training_data_latest.jsonl")
-        with open(export_path, "w", encoding="utf-8") as f:
-            for s in samples:
-                # Mocking the output format model expects
-                output = json.dumps({
-                    "reasoning": s.reasoning,
-                    "discovered_techniques": s.expert_tags
-                })
-                line = {
-                    "instruction": "Analyze this text for disinformation techniques...",
-                    "input": s.text,
-                    "output": output
-                }
-                f.write(json.dumps(line, ensure_ascii=False) + "\n")
-        
-        return export_path
 
     async def deploy_new_adapter(self, adapter_path: str):
         """

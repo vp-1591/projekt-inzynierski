@@ -13,16 +13,6 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
-class GoldenSample(Base):
-    __tablename__ = "golden_samples"
-
-    id = Column(Integer, primary_key=True, index=True)
-    text = Column(String)
-    original_tags = Column(JSON)
-    expert_tags = Column(JSON)
-    reasoning = Column(String)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    is_used_in_training = Column(Boolean, default=False)
 
 class TrainingRun(Base):
     __tablename__ = "training_runs"

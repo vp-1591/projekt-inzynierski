@@ -1,4 +1,4 @@
-# AntyDezinformator (Antigravity MLOps Edition)
+# AntyDezinformator
 
 System do wykrywania technik manipulacji w tekstach w języku polskim, oparty na modelu **Bielik-4.5B-Instruct**. Projekt integruje inferencję, automatyczny trening (SFT) oraz ewaluację w jeden pełny cykl MLOps.
 

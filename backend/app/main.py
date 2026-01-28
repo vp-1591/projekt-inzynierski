@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 import httpx
 from .db import database
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Any
 
 app = FastAPI(title="Disinformation Detector Backend")
 
@@ -23,11 +23,6 @@ MODEL_NAME = "bielik-lora-mipd:latest"
 class AnalysisRequest(BaseModel):
     text: str
 
-class FeedbackRequest(BaseModel):
-    text: str
-    expert_tags: List[str]
-    reasoning: str
-    original_tags: Optional[List[str]] = []
 
 def get_db():
     db = database.SessionLocal()
@@ -76,38 +71,6 @@ async def analyze_text(request: AnalysisRequest):
             print(f"ERROR DURING LLM CALL: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Ollama error: {str(e)}")
 
-@app.post("/feedback")
-async def submit_feedback(request: FeedbackRequest, db: Session = Depends(get_db)):
-    new_sample = database.GoldenSample(
-        text=request.text,
-        expert_tags=request.expert_tags,
-        original_tags=request.original_tags,
-        reasoning=request.reasoning
-    )
-    db.add(new_sample)
-    db.commit()
-    
-    # Check trigger threshold (Part 2.5.3)
-    sample_count = db.query(database.GoldenSample).filter(database.GoldenSample.is_used_in_training == False).count()
-    
-    return {
-        "message": "Feedback saved",
-        "current_new_samples": sample_count,
-        "trigger_threshold": 50
-    }
-
-@app.get("/stats")
-async def get_stats(db: Session = Depends(get_db)):
-    total_samples = db.query(database.GoldenSample).count()
-    new_samples = db.query(database.GoldenSample).filter(database.GoldenSample.is_used_in_training == False).count()
-    last_run = db.query(database.TrainingRun).order_by(database.TrainingRun.id.desc()).first()
-    
-    return {
-        "total_golden_samples": total_samples,
-        "new_samples_pending": new_samples,
-        "last_training_status": last_run.status if last_run else "Never run",
-        "last_f1_score": last_run.f1_score_after if last_run else None
-    }
 
 # Global orchestrator instance (singleton-ish for this simpliciy level)
 from .training.orchestrator import MLOpsOrchestrator

@@ -3,7 +3,7 @@
  */
 
 const BACKEND_URL = 'http://localhost:8000/analyze';
-const FEEDBACK_URL = 'http://localhost:8000/feedback';
+
 
 // Mapping model tags to user-friendly Polish names and descriptions
 const TECHNIQUE_MAPPING = {
@@ -94,14 +94,3 @@ export async function analyzeText(text) {
   }
 }
 
-/**
- * Submits expert feedback to the backend.
- */
-export async function submitFeedback(feedback) {
-  const response = await fetch(FEEDBACK_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(feedback),
-  });
-  return response.json();
-}
