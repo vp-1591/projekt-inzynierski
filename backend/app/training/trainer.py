@@ -16,11 +16,12 @@ class ProgressCallback(TrainerCallback):
         if state.max_steps > 0:
             progress = int((state.global_step / state.max_steps) * 100)
             try:
+                # print(f"DEBUG: Reporting progress {progress}% to {self.backend_url}", file=sys.stderr, flush=True)
                 requests.post(f"{self.backend_url}/training/progress", 
                               json={"stage": "training", "value": progress},
                               timeout=1)
             except Exception as e:
-                print(f"Failed to report progress: {e}")
+                print(f"Failed to report progress to {self.backend_url}: {e}", file=sys.stderr, flush=True)
 
 class ModelTrainer:
     def __init__(self, base_model="unsloth/bielik-7b-v1.1-bnb-4bit", output_dir="./model/latest"):
@@ -144,18 +145,19 @@ if __name__ == "__main__":
     parser.add_argument("--data", type=str, required=True, help="Path to training .jsonl")
     parser.add_argument("--output", type=str, default="./model/latest", help="Output directory")
     parser.add_argument("--base", type=str, default="unsloth/mistral-7b-bnb-4bit", help="Base model path")
+    parser.add_argument("--backend", type=str, default="http://localhost:8000", help="Backend URL")
     args = parser.parse_args()
 
     # Note: Inside WSL, make sure path exists
     trainer_instance = ModelTrainer(base_model=args.base, output_dir=args.output)
     print(f"Starting training on {args.data}...")
-    adapter_path = trainer_instance.run_sft(dataset_path=args.data)
+    adapter_path = trainer_instance.run_sft(dataset_path=args.data, backend_url=args.backend)
     print(f"Training finished. Adapter saved to: {adapter_path}")
 
     # Notify backend (from inside WSL to Windows Host)
     import requests
     try:
-        requests.post(f"http://127.0.0.1:8000/training/complete?adapter_path={adapter_path}")
+        requests.post(f"{args.backend}/training/complete?adapter_path={adapter_path}")
         print("Backend notified of completion.")
     except Exception as e:
         print(f"Failed to notify backend: {e}")

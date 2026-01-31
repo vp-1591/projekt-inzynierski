@@ -72,7 +72,15 @@ class MLOpsOrchestrator:
         base_model_windows = os.path.join(project_root, "model", "bielik-4.5b-base")
         base_model_wsl = base_model_windows.replace("\\", "/").replace("c:", "/mnt/c").replace("C:", "/mnt/c")
 
-        cmd = f"wsl --exec python3 -u -m app.training.trainer --data {wsl_path} --output ./model/latest --base {base_model_wsl}"
+        # Dynamically get Host IP for WSL to call back
+        import socket
+        try:
+            # This usually gets the LAN IP (e.g. 192.168.x.x) which is reachable from WSL
+            host_ip = socket.gethostbyname(socket.gethostname())
+        except:
+            host_ip = "127.0.0.1" # Fallback
+
+        cmd = f"wsl --exec python3 -u -m app.training.trainer --data {wsl_path} --output ./model/latest --base {base_model_wsl} --backend http://{host_ip}:8000"
         
         try:
             with open(log_file, "w") as f_log:
