@@ -57,11 +57,35 @@ class MLOpsOrchestrator:
         # 2. Trigger WSL (Linux) training
         wsl_path = file_path.replace("\\", "/").replace("c:", "/mnt/c").replace("C:", "/mnt/c")
         
-        # NOTE: Pass run_id or some callback URL so arguments can be tracked
+        # Logging setup
+        log_dir = "logs"
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, f"training_{new_run.id}.log")
+        
         cmd = f"wsl python3 -m backend.app.training.trainer --data {wsl_path} --output ./model/latest"
         
-        subprocess.Popen(cmd, shell=True)
-        return True
+        try:
+            with open(log_file, "w") as f_log:
+                f_log.write(f"--- Training started at {datetime.utcnow()} ---\n")
+                f_log.write(f"COMMAND: {cmd}\n\n")
+            
+            # Open log in append mode for the subprocess
+            f_log = open(log_file, "a")
+            process = subprocess.Popen(
+                cmd, 
+                shell=True, 
+                stdout=f_log, 
+                stderr=subprocess.STDOUT,
+                universal_newlines=True
+            )
+            print(f"DEBUG: Training process started with PID {process.pid}. Logs: {log_file}")
+            return True
+        except Exception as e:
+            print(f"ERROR: Failed to start training: {str(e)}")
+            self.status = "idle"
+            new_run.status = "failed"
+            self.db.commit()
+            return False
 
     def update_progress(self, stage: str, value: int):
         if stage == "training":

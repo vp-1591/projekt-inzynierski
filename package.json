@@ -1,0 +1,12 @@
+{
+  "name": "antydezinformator-root",
+  "version": "1.0.0",
+  "description": "Root management for AntyDezinformator",
+  "scripts": {
+    "install-all": "npm install --prefix frontend && pip install -r backend/requirements.txt",
+    "dev": "npx concurrently \"cd frontend && npm run dev\" \"cd backend && python -m app.main\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

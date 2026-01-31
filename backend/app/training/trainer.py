@@ -116,9 +116,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Note: Inside WSL, make sure path exists
-    trainer_instance = ModelTrainer(base_model_path=args.base, output_dir=args.output)
+    trainer_instance = ModelTrainer(base_model=args.base, output_dir=args.output)
     print(f"Starting training on {args.data}...")
-    adapter_path = trainer_instance.run_sft(train_data_path=args.data)
+    adapter_path = trainer_instance.run_sft(dataset_path=args.data)
     print(f"Training finished. Adapter saved to: {adapter_path}")
 
     # Notify backend (from inside WSL to Windows Host)
