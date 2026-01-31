@@ -27,3 +27,6 @@ dist-ssr
 *.pt
 *.pth
 *.jsonl
+
+/backend/unsloth_compiled_cache
+/model

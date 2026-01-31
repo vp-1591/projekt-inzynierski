@@ -62,7 +62,17 @@ class MLOpsOrchestrator:
         os.makedirs(log_dir, exist_ok=True)
         log_file = os.path.join(log_dir, f"training_{new_run.id}.log")
         
-        cmd = f"wsl python3 -m backend.app.training.trainer --data {wsl_path} --output ./model/latest"
+        # Define model path in WSL format (Resolving Project Root)
+        current_dir = os.getcwd()
+        if os.path.basename(current_dir) == "backend":
+            project_root = os.path.dirname(current_dir)
+        else:
+            project_root = current_dir
+            
+        base_model_windows = os.path.join(project_root, "model", "bielik-4.5b-base")
+        base_model_wsl = base_model_windows.replace("\\", "/").replace("c:", "/mnt/c").replace("C:", "/mnt/c")
+
+        cmd = f"wsl --exec python3 -u -m app.training.trainer --data {wsl_path} --output ./model/latest --base {base_model_wsl}"
         
         try:
             with open(log_file, "w") as f_log:

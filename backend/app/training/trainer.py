@@ -36,13 +36,24 @@ class ModelTrainer:
         if os.name == 'nt':
             print("WARNING: Unsloth is optimized for Linux. Running on Windows may fail.")
 
-        # 1. Load Model
-        max_seq_length = 2048 # Reduced for developer version
+        import sys
+        import subprocess
+        # DEBUG: Print REAL system VRAM via nvidia-smi
+        try:
+            cmd = "nvidia-smi --query-gpu=memory.total,memory.used,memory.free --format=csv,noheader"
+            output = subprocess.check_output(cmd, shell=True).decode().strip()
+            total, used, free = output.split(',')
+            print(f"DEBUG [nvidia-smi]: Total: {total}, Used: {used}, Free: {free}", file=sys.stderr, flush=True)
+        except Exception as e:
+            print(f"DEBUG: Could not run nvidia-smi: {e}", file=sys.stderr, flush=True)
+
+        max_seq_length = 1024 # Increased to fit 795t data, safe with Paged AdamW
         
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name = self.base_model,
             max_seq_length = max_seq_length,
             load_in_4bit = True,
+            use_gradient_checkpointing = "unsloth",
         )
 
         # 2. Add LoRA
@@ -65,6 +76,24 @@ class ModelTrainer:
         
         # 4. Setup Trainer
         from transformers import TrainingArguments
+        
+        def formatting_prompts_func(examples):
+            convos = []
+            texts = []
+            mapper = {"input": "user", "output": "assistant"}
+            for input_text, output_text in zip(examples["input"], examples["output"]):
+                # Manual Truncation: 1024 tokens ~= 4000 chars. 
+                # We limit input article to 3500 chars to save room for output and system prompts.
+                # This prevents OOM on 16k token articles.
+                truncated_input = input_text[:3500] + "...(truncated)" if len(input_text) > 3500 else input_text
+                
+                messages = [
+                    {"role": "user", "content": truncated_input},
+                    {"role": "assistant", "content": output_text}
+                ]
+                texts.append(tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False))
+            return texts
+
         trainer = SFTTrainer(
             model = model,
             tokenizer = tokenizer,
@@ -73,16 +102,18 @@ class ModelTrainer:
             max_seq_length = max_seq_length,
             dataset_num_proc = 2,
             packing = False,
+            formatting_func = formatting_prompts_func,
             args = TrainingArguments(
-                per_device_train_batch_size = 2,
-                gradient_accumulation_steps = 4,
+                per_device_train_batch_size = 1,
+                gradient_accumulation_steps = 4, # Reduced from 8 to save interaction memory
                 warmup_steps = 5,
-                max_steps = max_steps,
+                gradient_checkpointing = True, # CRITICAL FIX for VRAM
+                num_train_epochs = 2,
                 learning_rate = 2e-4,
                 fp16 = not torch.cuda.is_bf16_supported(),
                 bf16 = torch.cuda.is_bf16_supported(),
                 logging_steps = 1,
-                optim = "adamw_8bit",
+                optim = "paged_adamw_8bit", # CRITICAL: Offload optimizer to RAM
                 weight_decay = 0.01,
                 lr_scheduler_type = "linear",
                 seed = 3407,
@@ -112,7 +143,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", type=str, required=True, help="Path to training .jsonl")
     parser.add_argument("--output", type=str, default="./model/latest", help="Output directory")
-    parser.add_argument("--base", type=str, default="drive/MyDrive/bielik-4.5b-base", help="Base model path")
+    parser.add_argument("--base", type=str, default="unsloth/mistral-7b-bnb-4bit", help="Base model path")
     args = parser.parse_args()
 
     # Note: Inside WSL, make sure path exists
