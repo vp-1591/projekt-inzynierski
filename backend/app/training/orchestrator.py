@@ -117,22 +117,91 @@ class MLOpsOrchestrator:
         self.evaluation_progress = 0
         self.latest_adapter_path = adapter_path
         
-        # Mock evaluation process for demo (Real implementation would run benchmark script)
-        # In real scenario: start benchmark subprocess
+        # Real implementation: run benchmark script via WSL
         import threading
-        import time
-        import random
         
-        def mock_eval():
-            for i in range(0, 101, 10):
-                self.evaluation_progress = i
-                time.sleep(0.5)
-            
-            self.new_f1_score = round(random.uniform(0.70, 0.85), 4)
-            self.status = "ready_to_promote"
-            print(f"DEBUG: Evaluation done. New F1: {self.new_f1_score}")
+        def run_benchmark():
+            try:
+                # 1. Resolve paths
+                current_dir = os.getcwd()
+                if os.path.basename(current_dir) == "backend":
+                    project_root = os.path.dirname(current_dir)
+                else:
+                    project_root = current_dir
+                    
+                # WSL Path Converter
+                def to_wsl(path):
+                    return path.replace("\\", "/").replace("c:", "/mnt/c").replace("C:", "/mnt/c")
+                
+                # Handle adapter path (could be Windows path OR WSL path from trainer)
+                if adapter_path.startswith("/mnt/"):
+                    adapter_wsl = adapter_path
+                else:
+                    # Assume relative or absolute Windows path
+                    if not os.path.isabs(adapter_path):
+                         adapter_full_win = os.path.join(project_root, adapter_path)
+                    else:
+                        adapter_full_win = adapter_path
+                    
+                    # Normalize and convert
+                    adapter_full_win = os.path.normpath(os.path.abspath(adapter_full_win))
+                    adapter_wsl = to_wsl(adapter_full_win)
 
-        threading.Thread(target=mock_eval).start()
+                base_dir_win = os.path.join(project_root, "model", "bielik-4.5b-base")
+                dataset_win = os.path.join(project_root, "model", "dataset", "mipd_test.jsonl")
+                output_dir_win = os.path.join(project_root, "model", "benchmark_reports")
+                
+                base_wsl = to_wsl(base_dir_win)
+                data_wsl = to_wsl(dataset_win)
+                output_wsl = to_wsl(output_dir_win)
+                
+                # Backend IP
+                import socket
+                try:
+                    host_ip = socket.gethostbyname(socket.gethostname())
+                except:
+                    host_ip = "127.0.0.1"
+                    
+                cmd = f"wsl --exec python3 -u -m app.training.benchmark --adapter {adapter_wsl} --base {base_wsl} --data {data_wsl} --backend http://{host_ip}:8000 --output_dir {output_wsl} --no-tqdm"
+                
+                print(f"DEBUG: Starting benchmark with command: {cmd}")
+                
+                process = subprocess.Popen(
+                    cmd,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    universal_newlines=True
+                )
+                
+                # Stream output to capture F1
+                captured_f1 = 0.0
+                while True:
+                    line = process.stdout.readline()
+                    if not line and process.poll() is not None:
+                        break
+                    if line:
+                        print(f"BENCHMARK: {line.strip()}")
+                        if "FINAL_F1_SCORE:" in line:
+                            try:
+                                captured_f1 = float(line.split(":")[1].strip())
+                            except:
+                                pass
+                            
+                process.wait()
+                
+                if process.returncode == 0:
+                    self.new_f1_score = captured_f1
+                    self.status = "ready_to_promote"
+                    print(f"DEBUG: Evaluation done. New F1: {self.new_f1_score}")
+                else:
+                    print(f"ERROR: Benchmark failed with return code {process.returncode}")
+                    self.status = "idle" # Reset to idle on failure
+            except Exception as e:
+                print(f"ERROR: Benchmark thread failed: {e}")
+                self.status = "idle"
+
+        threading.Thread(target=run_benchmark).start()
 
 
     async def deploy_new_adapter(self, adapter_path: str):

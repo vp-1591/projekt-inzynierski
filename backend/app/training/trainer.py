@@ -131,13 +131,8 @@ class ModelTrainer:
         model.save_pretrained(adapter_path)
         tokenizer.save_pretrained(adapter_path)
 
-        # Notify backend
-        try:
-            requests.post(f"{backend_url}/training/complete", json={"adapter_path": adapter_path})
-        except:
-            print("Failed to notify backend of completion")
-            
-        return trainer_stats
+        # Return absolute path to avoid ambiguity
+        return os.path.abspath(adapter_path)
 
 if __name__ == "__main__":
     import argparse
