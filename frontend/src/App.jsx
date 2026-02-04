@@ -12,8 +12,10 @@ function App() {
     status: 'idle',
     training_progress: 0,
     evaluation_progress: 0,
-    baseline_f1: 0,
-    new_f1: 0
+    baseline_f1_non_empty: 0,
+    baseline_exact_match: 0,
+    new_f1_non_empty: 0,
+    new_exact_match: 0
   });
 
   const pollInterval = useRef(null);
@@ -132,15 +134,26 @@ function App() {
               </div>
             </div>
 
-            <div className="stats-grid">
-              <div className="stat-card">
-                <span className="label">Baseline F1</span>
-                <span className="value">{trainingStatus.baseline_f1.toFixed(4)}</span>
+            <div className="stats-table">
+              <div className="stats-header">
+                <span className="col-metric">Metric</span>
+                <span className="col-val">Baseline</span>
+                <span className="col-val">New Model</span>
               </div>
-              <div className="stat-card">
-                <span className="label">Nowy F1</span>
-                <span className={`value ${trainingStatus.new_f1 >= trainingStatus.baseline_f1 ? 'positive' : ''}`}>
-                  {trainingStatus.new_f1.toFixed(4)}
+              
+              <div className="stats-row">
+                <span className="metric-label">F1 (non-empty)</span>
+                <span className="stat-value">{trainingStatus.baseline_f1_non_empty.toFixed(4)}</span>
+                <span className={`stat-value ${trainingStatus.new_f1_non_empty >= trainingStatus.baseline_f1_non_empty ? 'positive' : ''}`}>
+                  {trainingStatus.new_f1_non_empty.toFixed(4)}
+                </span>
+              </div>
+
+              <div className="stats-row">
+                <span className="metric-label">Exact Match (all docs)</span>
+                <span className="stat-value">{trainingStatus.baseline_exact_match.toFixed(4)}</span>
+                <span className={`stat-value ${trainingStatus.new_exact_match >= trainingStatus.baseline_exact_match ? 'positive' : ''}`}>
+                  {trainingStatus.new_exact_match.toFixed(4)}
                 </span>
               </div>
             </div>
@@ -150,7 +163,7 @@ function App() {
               disabled={trainingStatus.status !== 'ready_to_promote'}
               className="promote-button"
             >
-              Wdróż model
+              {trainingStatus.status === 'deploying' ? 'Wdrażanie...' : 'Wdróż model'}
             </button>
           </div>
         </aside>

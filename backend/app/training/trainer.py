@@ -131,13 +131,8 @@ class ModelTrainer:
         model.save_pretrained(adapter_path)
         tokenizer.save_pretrained(adapter_path)
 
-        # 7. Save Adapter (GGUF) for Ollama
-        # We use f16 to be safe and fast, q8_0 is also good but requires quantization step
-        try:
-            adapter_gguf_dir = f"{self.output_dir}/adapter_gguf"
-            model.save_pretrained_gguf(adapter_gguf_dir, tokenizer, quantization_method="f16")
-        except Exception as e:
-            print(f"WARNING: GGUF export failed: {e}")
+        # 7. Save Adapter (GGUF) - MOVED TO DEPLOYMENT PHASE for speed
+        # GGUF conversion removed from training loop to save time during experimentation.
 
         # Return absolute path to avoid ambiguity (HF path)
         return os.path.abspath(adapter_path)

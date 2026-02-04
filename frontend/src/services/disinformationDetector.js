@@ -88,7 +88,7 @@ export async function analyzeText(text) {
 
     return {
       techniques: techniques,
-      reasoning: data.reasoning || data.reasonning || "Brak uzasadnienia." // Handle potential model typo
+      reasoning: data.reasoning || "Model wygenerował nieprawidłową strukturę json." // Handle potential model typo
     };
 
   } catch (error) {

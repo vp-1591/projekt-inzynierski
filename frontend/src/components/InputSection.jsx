@@ -11,7 +11,7 @@ export function InputSection({ onAnalyze, isAnalyzing }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', padding: '1.5rem 0' }}>
       <div style={{ position: 'relative' }}>
         <textarea
           value={text}

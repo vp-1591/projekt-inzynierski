@@ -1,0 +1,99 @@
+============================================================
+INFERENCE REPORT: 1521 documents
+============================================================
+
+### Importance of Document-Level F1 Score ###
+Document-level F1 is crucial for evaluating multi-label classification models, especially when dealing with imbalanced datasets or documents with varying numbers of labels (including documents with no ground truth labels). Unlike traditional micro or macro F1 scores which aggregate metrics across all labels, document-level F1 assesses the quality of predictions for each individual document. This approach prevents models from artificially inflating performance by correctly predicting 'no labels' for many documents, or by performing well on frequently occurring labels while failing on rare ones. It provides a more faithful representation of the model's ability to assign the correct set of labels to each document.
+----------------------------------------------
+
+
+Parsing Success Rate (Strict JSON): 0.9625 (1464/1521)
+Format Correction Rate (Recovered JSON): 0.0020 (3/1521)
+Total Parsing Success (Strict + Recovered): 0.9645 (1467/1521)
+
+Mean Document-Level F1 (all docs): 0.7963
+Mean Document-Level F1 (excluding empty gold-label docs): 0.2847
+Exact-Match Accuracy: 0.7318 (1113/1521)
+
+--- Confusion Matrix (per tag) ---
+Tag: ANECDOTE
+  True Negatives (TN): 1476
+  False Positives (FP): 1
+  False Negatives (FN): 43
+  True Positives (TP): 1
+------------------------------
+Tag: CHERRY_PICKING
+  True Negatives (TN): 1283
+  False Positives (FP): 89
+  False Negatives (FN): 91
+  True Positives (TP): 58
+------------------------------
+Tag: EMOTIONAL_CONTENT
+  True Negatives (TN): 1415
+  False Positives (FP): 14
+  False Negatives (FN): 89
+  True Positives (TP): 3
+------------------------------
+Tag: EXAGGERATION
+  True Negatives (TN): 1219
+  False Positives (FP): 68
+  False Negatives (FN): 106
+  True Positives (TP): 128
+------------------------------
+Tag: FALSE_CAUSE
+  True Negatives (TN): 1411
+  False Positives (FP): 15
+  False Negatives (FN): 90
+  True Positives (TP): 5
+------------------------------
+Tag: LEADING_QUESTIONS
+  True Negatives (TN): 1505
+  False Positives (FP): 1
+  False Negatives (FN): 15
+  True Positives (TP): 0
+------------------------------
+Tag: MISLEADING_CLICKBAI
+  True Negatives (TN): 1508
+  False Positives (FP): 0
+  False Negatives (FN): 13
+  True Positives (TP): 0
+------------------------------
+Tag: QUOTE_MINING
+  True Negatives (TN): 1507
+  False Positives (FP): 0
+  False Negatives (FN): 14
+  True Positives (TP): 0
+------------------------------
+Tag: REFERENCE_ERROR
+  True Negatives (TN): 1235
+  False Positives (FP): 167
+  False Negatives (FN): 55
+  True Positives (TP): 64
+------------------------------
+Tag: STRAWMAN
+  True Negatives (TN): 1484
+  False Positives (FP): 0
+  False Negatives (FN): 37
+  True Positives (TP): 0
+------------------------------
+Tag: WHATABOUTISM
+  True Negatives (TN): 1482
+  False Positives (FP): 2
+  False Negatives (FN): 36
+  True Positives (TP): 1
+------------------------------
+
+--- Sample Results (First 10) ---
+F1_Doc     | Exact Match  | Ground Truth                   | Model Output (Reasoning & Tags)                                                 
+---------------------------------------------------------------------------------------------------------------------------------------
+1.0000     | True         | []                             | Reasoning: Tekst ma charakter informacyjny i nie zawiera cech manipulacji.... | Tags: []...
+1.0000     | True         | []                             | Reasoning: Tekst ma charakter informacyjny i nie zawiera cech manipulacji.... | Tags: []...
+1.0000     | True         | []                             | Reasoning: Tekst ma charakter informacyjny i nie zawiera cech manipulacji.... | Tags: []...
+0.0000     | False        | ['REFERENCE_ERROR']            | {"reasoning": "Autor stosuje technikę REFERENCE_ERROR, gdy odwołuje się do konkr..
+0.0000     | False        | ['REFERENCE_ERROR', 'EMOTIONAL_CONTENT', 'FALSE_CAUSE'].. | Reasoning: Autor stosuje technikę wyboru fragmentów informacji (CHERRY_PICKING), skupiając się na negatywnych a... | Tags: ['CHERRY_PICKING', 'EXAGGERATION']...
+1.0000     | True         | []                             | Reasoning: Tekst ma charakter informacyjny i nie zawiera cech manipulacji.... | Tags: []...
+1.0000     | True         | []                             | Reasoning: Tekst ma charakter informacyjny i nie zawiera cech manipulacji.... | Tags: []...
+0.0000     | False        | ['REFERENCE_ERROR', 'EMOTIONAL_CONTENT', 'ANECDOTE'].. | Reasoning: Tekst ma charakter informacyjny i nie zawiera cech manipulacji.... | Tags: []...
+1.0000     | True         | []                             | Reasoning: Tekst ma charakter informacyjny i nie zawiera cech manipulacji.... | Tags: []...
+1.0000     | True         | []                             | Reasoning: Tekst ma charakter informacyjny i nie zawiera cech manipulacji.... | Tags: []...
+---------------------------------------------------------------------------------------------------------------------------------------

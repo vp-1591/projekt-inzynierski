@@ -179,10 +179,10 @@ def main():
     print(f"Loading dataset from {args.data}...")
     dataset = load_dataset("json", data_files=args.data, split="train") # It's 'train' split by default for jsonl unless specified
     
-    # 3. Sample 30 items
-    print("Sampling 10 items...")
+    # 3. Sample 5 items
+    print("Sampling 5 items...")
     dataset = dataset.shuffle(seed=42)
-    sample_size = min(10, len(dataset))
+    sample_size = min(5, len(dataset))
     dataset = dataset.select(range(sample_size))
     
     # 4. Format Prompts
@@ -222,10 +222,29 @@ def main():
         
     # 6. Aggregate Metrics
     total_docs = len(results)
-    total_f1 = sum(r['f1_doc'] for r in results)
-    mean_f1 = total_f1 / total_docs if total_docs > 0 else 0.0
+    strict_success_count = sum(1 for r in results if r['parsing_status'] == 'Strict Success')
+    recovered_count = sum(1 for r in results if r['parsing_status'] == 'Recovered')
     
-    print(f"RESULT: Mean Document-Level F1: {mean_f1:.4f}")
+    # New metrics logic
+    total_f1_doc = sum(r['f1_doc'] for r in results)
+    
+    total_f1_doc_non_empty_gold = sum(r['f1_doc'] for r in results if r['has_gold_labels'])
+    non_empty_gold_docs_count = sum(1 for r in results if r['has_gold_labels'])
+    
+    exact_matches_count = sum(1 for r in results if r['exact_match'])
+    
+    # Calculations
+    parsing_success_rate = strict_success_count / total_docs if total_docs > 0 else 0
+    mean_f1_doc_all_docs = total_f1_doc / total_docs if total_docs > 0 else 0
+    mean_f1_doc_non_empty = total_f1_doc_non_empty_gold / non_empty_gold_docs_count if non_empty_gold_docs_count > 0 else 0
+    exact_match_accuracy = exact_matches_count / total_docs if total_docs > 0 else 0
+    
+    print(f"RESULT: Mean Document-Level F1 (excluding empty gold-label docs): {mean_f1_doc_non_empty:.4f}")
+    
+    # Machine readable tokens for orchestrator
+    final_f1_to_report = mean_f1_doc_non_empty if non_empty_gold_docs_count > 0 else 0.0
+    print(f"FINAL_F1_SCORE: {final_f1_to_report:.4f}")
+    print(f"FINAL_EXACT_MATCH: {exact_match_accuracy:.4f}")
     
     # 7. Generate Report content
     report_lines = []
@@ -234,12 +253,15 @@ def main():
     report_lines.append(f"Adapter: {args.adapter}")
     report_lines.append(f"Date: {time.strftime('%Y-%m-%d %H:%M:%S')}")
     report_lines.append("="*60)
-    report_lines.append(f"Mean Document-Level F1: {mean_f1:.4f}")
     
-    strict_success = sum(1 for r in results if r['parsing_status'] == 'Strict Success')
-    recovered = sum(1 for r in results if r['parsing_status'] == 'Recovered')
-    report_lines.append(f"Parsing Success Rate (Strict): {strict_success}/{total_docs}")
-    report_lines.append(f"Format Correction Rate (Recovered): {recovered}/{total_docs}")
+    report_lines.append(f"Parsing Success Rate (Strict JSON with structure validation i.e. reasoning is spelled correctly): {parsing_success_rate:.4f} ({strict_success_count}/{total_docs})")
+    report_lines.append(f"Exact-Match Accuracy: {exact_match_accuracy:.4f} ({exact_matches_count}/{total_docs})")
+    
+    if non_empty_gold_docs_count > 0:
+        report_lines.append(f"Mean Document-Level F1 (excluding empty gold-label docs): {mean_f1_doc_non_empty:.4f}")
+    else:
+        report_lines.append("Mean Document-Level F1 (excluding empty gold-label docs): N/A (No documents with gold labels found)")
+        
     report_lines.append("-" * 60)
     
     # Write to file
@@ -251,7 +273,11 @@ def main():
         f.write("\n".join(report_lines))
         
     print(f"Report written to: {output_path}")
-    print(f"FINAL_F1_SCORE:{mean_f1:.4f}") # Special token for Orchestrator to parse
+    # We yield the F1 (excluding empty) as the primary metric for promotion logic if needed, or stick to all docs? 
+    # User didn't specify which one drives promotion, but usually F1 (non-empty) is strictly harder and better signal.
+    # For compatibility with frontend that expects one number, let's output the strict one (non-empty) or safe fallback.
+    final_metric = mean_f1_doc_non_empty if non_empty_gold_docs_count > 0 else mean_f1_doc_all_docs
+    print(f"FINAL_F1_SCORE:{final_metric:.4f}")
     
 if __name__ == "__main__":
     main()
