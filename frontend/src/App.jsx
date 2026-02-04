@@ -190,7 +190,13 @@ function App() {
               <div className="analysis-results">
                 <div className="labels-list">
                   {results.techniques.map((tech, index) => (
-                    <span key={index} className="tech-badge">{tech}</span>
+                    <span 
+                      key={index} 
+                      className="tech-badge has-tooltip" 
+                      data-title={tech.description}
+                    >
+                      {tech.name}
+                    </span>
                   ))}
                 </div>
                 

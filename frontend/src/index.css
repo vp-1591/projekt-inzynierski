@@ -260,6 +260,33 @@ body {
   font-size: 0.85rem;
   font-weight: 500;
   letter-spacing: 0.02em;
+  position: relative;
+  cursor: help;
+}
+
+/* Tooltip custom styling (using title attribute but better) 
+   Note: Standard title attribute is unstylable. 
+   To make this truly custom, we'd need a data-attribute approach.
+   For now, cursor: help indicates interactivity. 
+*/
+.has-tooltip:hover::after {
+  content: attr(data-title);
+  position: absolute;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  padding: 0.5rem 0.8rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+  z-index: 10;
+  pointer-events: none;
+  min-width: 200px;
+  text-align: center;
 }
 
 .reasoning-text {

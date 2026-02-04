@@ -18,7 +18,7 @@ app.add_middleware(
 )
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
-MODEL_NAME = "bielik-lora-mipd:latest"
+MODEL_NAME = "bielik-xai-mipd:latest"
 
 class AnalysisRequest(BaseModel):
     text: str

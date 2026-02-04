@@ -24,7 +24,7 @@ const TECHNIQUE_MAPPING = {
     description: 'Używanie słów nacechowanych emocjonalnie, by wpłynąć na ocenę odbiorcy.'
   },
   'CHERRY_PICKING': {
-    name: 'Dowody anegdotyczne (Wybiórczość)',
+    name: 'Wybiórczość (Cherry Picking)',
     description: 'Wybieranie tylko tych faktów, które pasują do z góry założonej tezy.'
   },
   'FALSE_CAUSE': {
@@ -80,12 +80,15 @@ export async function analyzeText(text) {
     // Map tags to user-friendly names
     const techniques = tags.map(tag => {
       const info = TECHNIQUE_MAPPING[tag] || { name: tag };
-      return info.name;
+      return {
+        name: info.name,
+        description: info.description
+      };
     });
 
     return {
       techniques: techniques,
-      reasoning: "model reasoning goes here" // Single reasoning for all labels
+      reasoning: data.reasoning || data.reasonning || "Brak uzasadnienia." // Handle potential model typo
     };
 
   } catch (error) {

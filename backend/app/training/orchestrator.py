@@ -208,7 +208,46 @@ class MLOpsOrchestrator:
         """
         Implementation of 2.5.4: Hot-Swap Logic
         """
-        # 1. Update the local Modelfile content
+        # 1. Infer GGUF path from HF adapter path
+        # adapter_path comes as WSL path (e.g. /mnt/c/Users/.../model/latest/adapter)
+        # We need to find .../adapter_gguf/....gguf
+        
+        # Helper to convert WSL path back to Windows for Ollama (running on Windows)
+        def wsl_to_win(path):
+            if path.startswith("/mnt/c/"):
+                return path.replace("/mnt/c/", "c:/")
+            elif path.startswith("/mnt/d/"):
+                return path.replace("/mnt/d/", "d:/")
+            return path
+            
+        hf_wsl_path = adapter_path.rstrip("/")
+        gguf_wsl_dir = hf_wsl_path + "_gguf"
+        
+        # We need to find the actual .gguf file inside that directory
+        # Since the backend is running on Windows, we can access these files via Windows paths
+        gguf_win_dir = wsl_to_win(gguf_wsl_dir)
+        
+        print(f"DEBUG: Looking for GGUF in {gguf_win_dir}")
+        
+        found_gguf_path = None
+        try:
+            for file in os.listdir(gguf_win_dir):
+                if file.endswith(".gguf"):
+                    found_gguf_path = os.path.join(gguf_win_dir, file)
+                    break
+        except Exception as e:
+            print(f"ERROR: Could not list GGUF directory: {e}")
+            return False
+            
+        if not found_gguf_path:
+            print("ERROR: No .gguf file found in adapter directory")
+            return False
+            
+        # Normalize slashes for Modelfile
+        found_gguf_path = found_gguf_path.replace("\\", "/")
+        print(f"DEBUG: Found GGUF adapter: {found_gguf_path}")
+
+        # 2. Update the local Modelfile content
         modelfile_path = "c:/Users/vadim/Documents/Vadym/GitRep/projekt-inzynierski/model/Modelfile"
         
         with open(modelfile_path, "r") as f:
@@ -218,20 +257,22 @@ class MLOpsOrchestrator:
         with open(modelfile_path, "w") as f:
             for line in lines:
                 if line.startswith("ADAPTER"):
-                    f.write(f"ADAPTER {adapter_path}\n")
+                    f.write(f"ADAPTER {found_gguf_path}\n")
                 else:
                     f.write(line)
         
-        # 2. Tell Ollama to recreate the model with new config
+        # 3. Tell Ollama to recreate the model with new config
         async with httpx.AsyncClient() as client:
             try:
                 # Ollama's /api/create endpoint reloads the model from Modelfile
+                print(f"DEBUG: Sending create request to Ollama for {modelfile_path}")
                 response = await client.post(
                     "http://localhost:11434/api/create",
                     json={
                         "name": "bielik-lora-mipd",
                         "path": modelfile_path
-                    }
+                    },
+                    timeout=120.0 # Increased timeout for loading
                 )
                 response.raise_for_status()
                 print("DEBUG: Ollama model hot-swapped successfully.")
