@@ -1,0 +1,109 @@
+============================================================
+INFERENCE REPORT: 1521 documents
+============================================================
+
+### Importance of Document-Level F1 Score ###
+Document-level F1 is crucial for evaluating multi-label classification models, especially when dealing with imbalanced datasets or documents with varying numbers of labels (including documents with no ground truth labels). Unlike traditional micro or macro F1 scores which aggregate metrics across all labels, document-level F1 assesses the quality of predictions for each individual document. This approach prevents models from artificially inflating performance by correctly predicting 'no labels' for many documents, or by performing well on frequently occurring labels while failing on rare ones. It provides a more faithful representation of the model's ability to assign the correct set of labels to each document.
+----------------------------------------------
+
+
+Parsing Success Rate (Strict JSON): 0.9993 (1520/1521)
+Format Correction Rate (Recovered JSON): 0.0000 (0/1521)
+Total Parsing Success (Strict + Recovered): 0.9993 (1520/1521)
+
+Mean Document-Level F1 (all docs): 0.1205
+Mean Document-Level F1 (excluding empty gold-label docs): 0.4912
+Exact-Match Accuracy: 0.7291 (1109/1521)
+
+--- Confusion Matrix (per tag) ---
+Tag: ANECDOTE
+  True Negatives (TN): 1456
+  False Positives (FP): 21
+  False Negatives (FN): 28
+  True Positives (TP): 16
+------------------------------
+Tag: CHERRY_PICKING
+  True Negatives (TN): 1213
+  False Positives (FP): 159
+  False Negatives (FN): 48
+  True Positives (TP): 101
+------------------------------
+Tag: EMOTIONAL_CONTENT
+  True Negatives (TN): 1342
+  False Positives (FP): 87
+  False Negatives (FN): 52
+  True Positives (TP): 40
+------------------------------
+Tag: EXAGGERATION
+  True Negatives (TN): 1172
+  False Positives (FP): 115
+  False Negatives (FN): 47
+  True Positives (TP): 187
+------------------------------
+Tag: FALSE_CAUSE
+  True Negatives (TN): 1379
+  False Positives (FP): 47
+  False Negatives (FN): 67
+  True Positives (TP): 28
+------------------------------
+Tag: LEADING_QUESTIONS
+  True Negatives (TN): 1506
+  False Positives (FP): 0
+  False Negatives (FN): 15
+  True Positives (TP): 0
+------------------------------
+Tag: MISLEADING_CLICKBAI
+  True Negatives (TN): 1508
+  False Positives (FP): 0
+  False Negatives (FN): 13
+  True Positives (TP): 0
+------------------------------
+Tag: QUOTE_MINING
+  True Negatives (TN): 1507
+  False Positives (FP): 0
+  False Negatives (FN): 14
+  True Positives (TP): 0
+------------------------------
+Tag: REFERENCE_ERROR
+  True Negatives (TN): 1315
+  False Positives (FP): 87
+  False Negatives (FN): 36
+  True Positives (TP): 83
+------------------------------
+Tag: STRAWMAN
+  True Negatives (TN): 1465
+  False Positives (FP): 19
+  False Negatives (FN): 28
+  True Positives (TP): 9
+------------------------------
+Tag: WHATABOUTISM
+  True Negatives (TN): 1448
+  False Positives (FP): 36
+  False Negatives (FN): 26
+  True Positives (TP): 11
+------------------------------
+
+--- Sample Results (First 10) ---
+F1_Doc     | Exact Match  | Ground Truth                   | Model Output (Reasoning & Tags)                                                 
+---------------------------------------------------------------------------------------------------------------------------------------
+0.0000     | True         | []                             | ```json
+{"discovered_techniques": []}                                           
+0.0000     | True         | []                             | ```json
+{"discovered_techniques": []}                                           
+0.0000     | True         | []                             | ```json
+{"discovered_techniques": []}                                           
+0.5000     | False        | ['REFERENCE_ERROR']            | ```json
+{"discovered_techniques": ["REFERENCE_ERROR", "CHERRY_PICKING", "EXAGGER..
+0.3333     | False        | ['REFERENCE_ERROR', 'EMOTIONAL_CONTENT', 'FALSE_CAUSE'].. | ```json
+{"discovered_techniques": ["REFERENCE_ERROR", "CHERRY_PICKING", "EXAGGER..
+0.0000     | False        | []                             | ```json
+{"discovered_techniques": ["CHERRY_PICKING", "EXAGGERATION"]}           
+0.0000     | True         | []                             | ```json
+{"discovered_techniques": []}                                           
+0.6667     | False        | ['REFERENCE_ERROR', 'EMOTIONAL_CONTENT', 'ANECDOTE'].. | ```json
+{"discovered_techniques": ["REFERENCE_ERROR", "EMOTIONAL_CONTENT", "EXAG..
+0.0000     | True         | []                             | ```json
+{"discovered_techniques": []}                                           
+0.0000     | True         | []                             | ```json
+{"discovered_techniques": []}                                           
+---------------------------------------------------------------------------------------------------------------------------------------

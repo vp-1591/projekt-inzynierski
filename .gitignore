@@ -29,4 +29,6 @@ dist-ssr
 *.jsonl
 
 /backend/unsloth_compiled_cache
-/model
+/model/*
+!/model/benchmark-reports
+!/model/Modelfile
