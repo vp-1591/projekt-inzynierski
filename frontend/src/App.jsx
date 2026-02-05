@@ -72,7 +72,7 @@ function App() {
     try {
       const response = await fetch('http://localhost:8000/training/promote', { method: 'POST' });
       if (response.ok) {
-        alert("Model został pomyślnie podmieniony!");
+        // Success feedback is handled by button state "Wdrażanie..." -> "Wdróż model" transition
       }
     } catch (err) {
       alert("Błąd awansu modelu: " + err.message);
@@ -158,13 +158,34 @@ function App() {
               </div>
             </div>
 
-            <button
-              onClick={handlePromote}
-              disabled={trainingStatus.status !== 'ready_to_promote'}
-              className="promote-button"
-            >
-              {trainingStatus.status === 'deploying' ? 'Wdrażanie...' : 'Wdróż model'}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                onClick={handlePromote}
+                disabled={trainingStatus.status !== 'ready_to_promote'}
+                className="promote-button"
+              >
+                {trainingStatus.status === 'deploying' ? 'Wdrażanie...' : 'Wdróż model'}
+              </button>
+              
+              {/* Status Indicator Circle */}
+              <div 
+                title={`Status: ${trainingStatus.status}`}
+                style={{
+                  width: '16px', 
+                  height: '16px', 
+                  borderRadius: '50%',
+                  backgroundColor: (() => {
+                    switch (trainingStatus.status) {
+                      case 'deploying': return '#fbbf24'; // Yellow
+                      case 'deployment_success': return '#10b981'; // Green
+                      case 'deployment_error': return '#ef4444'; // Red
+                      default: return '#9ca3af'; // Gray
+                    }
+                  })(),
+                  transition: 'background-color 0.3s ease'
+                }}
+              ></div>
+            </div>
           </div>
         </aside>
       )}

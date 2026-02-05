@@ -6,3 +6,4 @@ python-dotenv
 httpx
 pandas
 scikit-learn
+python-dotenv

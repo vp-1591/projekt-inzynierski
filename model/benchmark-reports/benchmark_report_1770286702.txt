@@ -1,0 +1,9 @@
+============================================================
+INFERENCE REPORT: 7 documents
+Adapter: /mnt/c/Users/vadim/Documents/Vadym/GitRep/projekt-inzynierski/backend/model/latest/adapter
+Date: 2026-02-05 11:18:22
+============================================================
+Parsing Success Rate (Strict JSON with structure validation i.e. reasoning is spelled correctly): 0.7143 (5/7)
+Exact-Match Accuracy: 0.2857 (2/7)
+Mean Document-Level F1 (excluding empty gold-label docs): 0.0000
+------------------------------------------------------------

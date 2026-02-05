@@ -33,3 +33,4 @@ dist-ssr
 /model/*
 !/model/benchmark-reports
 !/model/Modelfile
+.env

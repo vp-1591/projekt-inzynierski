@@ -1,52 +1,83 @@
 import os
 import sys
-import torch
-from unsloth import FastLanguageModel
+import subprocess
 
 def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--adapter", type=str, required=True, help="Path to adapter HF directory")
-    parser.add_argument("--base", type=str, required=True, help="Path to base model")
-    parser.add_argument("--output", type=str, required=True, help="Output output GGUF DIRECTORY")
-    parser.add_argument("--quant_method", type=str, default="q4_k_m", help="Quantization method (q4_k_m, q8_0, etc.)")
+    parser.add_argument("--base", type=str, required=False, help="Path to base model directory")
+    parser.add_argument("--base-model-id", type=str, required=False, help="Base model ID (e.g. speakleash/Bielik-4.5B-v3)")
+    parser.add_argument("--output", type=str, required=True, help="Output GGUF file path (including .gguf extension)")
+    parser.add_argument("--quant_method", type=str, default="q4_k_m", help="Quantization method (q4_k_m, f16, etc.)")
     args = parser.parse_args()
 
-    print(f"DEBUG: Starting GGUF conversion for {args.adapter}")
+    # Debug Environment for Token
+    token = os.environ.get("HF_TOKEN")
+    if token:
+        print(f"DEBUG: HF_TOKEN found {token}")
+    else:
+        print("DEBUG: HF_TOKEN NOT found in environment variables!")
 
-    # 1. Load Model + Adapter
-    # Note: To merge and save GGUF, we generally load in 16bit, but Unsloth handles 4bit/16bit complexity for us.
-    # The key is we need to load the SAME setup we trained with or compatible one.
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name = args.adapter, # Load adapter directly
-        max_seq_length = 2048,
-        load_in_4bit = True, # We load in 4bit to merge with 4bit base if that matches training
-        # If we trained on 4bit base, we should load 4bit base here.
-    )
+    if not args.base and not args.base_model_id:
+        print("ERROR: Either --base or --base-model-id must be provided")
+        sys.exit(1)
 
-    # 2. Save GGUF
-    # This automatically merges LoRA into base model and quantizes
-    # Since we want a fast deploy, we might use "q4_k_m" (recommended) or "q8_0" for quality.
-    # User asked for "merged_4bit" optimization effectively.
+    print(f"DEBUG: Starting GGUF conversion for {args.adapter} using local llama.cpp submodule")
+
+    # Locate the vendored script
+    # We assume this script runs inside WSL/Linux container relative to project root
+    # or that paths are absolute.
     
-    print(f"DEBUG: Saving GGUF to {args.output} with method {args.quant_method}...")
+    # Path to convert_lora_to_gguf.py within the submodule
+    # Adjust path: backend/vendor/llama.cpp/convert_lora_to_gguf.py
+    # Since we execute this via 'python -m app.training.converter', current dir is usually backend/
     
-    # "quantization_method" argument in save_pretrained_gguf accepts strings like "f16", "q4_k_m"
-    # To use the optimized "forced_merged_4bit" (saves only adapter? No, that's save_pretrained_merged).
-    # save_pretrained_gguf handles everything.
+    script_path = os.path.abspath("backend/vendor/llama.cpp/convert_lora_to_gguf.py")
     
-    # IMPORTANT: Output must be a directory? Or file?
-    # Unsloth save_pretrained_gguf takes a directory and saves .gguf inside it.
+    # Check if script exists, if not, try resolving relative to this file
+    if not os.path.exists(script_path):
+        current_file_dir = os.path.dirname(os.path.abspath(__file__)) # app/training
+        project_root = os.path.dirname(os.path.dirname(current_file_dir)) # backend/
+        script_path = os.path.join(project_root, "vendor", "llama.cpp", "convert_lora_to_gguf.py")
+
+    if not os.path.exists(script_path):
+        # Fallback: maybe we are running from project root
+        script_path = "backend/vendor/llama.cpp/convert_lora_to_gguf.py"
     
-    os.makedirs(args.output, exist_ok=True)
+    if not os.path.exists(script_path):
+        print(f"ERROR: Could not find conversion script at {script_path}")
+        sys.exit(1)
+
+    print(f"DEBUG: Using conversion script: {script_path}")
     
-    model.save_pretrained_gguf(
-        args.output, 
-        tokenizer, 
-        quantization_method=args.quant_method
-    )
+    # Construct command
+    # python3 script.py --outfile <output> <adapter> [--base <base> | --base-model-id <id>]
     
-    print(f"DEBUG: Conversion complete. GGUF saved in {args.output}")
+    cmd = [
+        "python3",
+        script_path,
+        "--outfile", args.output,
+        args.adapter 
+    ]
+
+    if args.base_model_id:
+        cmd.extend(["--base-model-id", args.base_model_id])
+    elif args.base:
+        cmd.extend(["--base", args.base])
+    
+    print(f"DEBUG: Executing: {' '.join(cmd)}")
+    
+    try:
+        # Run conversion
+        subprocess.check_call(cmd)
+        print(f"DEBUG: Conversion complete. GGUF saved to {args.output}")
+    except subprocess.CalledProcessError as e:
+        print(f"ERROR: Conversion failed with code {e.returncode}")
+        sys.exit(e.returncode)
+    except Exception as e:
+        print(f"ERROR: Unexpected error: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

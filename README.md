@@ -14,15 +14,26 @@ System do wykrywania technik manipulacji w tekstach w języku polskim, oparty na
 ### 1. Wymagania Sprzętowe (Wersja Deweloperska)
 - **GPU**: NVIDIA (min. 8GB VRAM dla treningu 4-bit).
 - **OS**: Windows 10/11 z zainstalowanym **WSL2** (Ubuntu).
+- **Zależności GIT**: Projekt korzysta z podmodułów (llama.cpp).
+  ```bash
+  git submodule update --init --recursive
+  ```
 
-### 2. Przygotowanie Ollama
+### 2. Konfiguracja Zmiennych Środowiskowych
+1. Utwórz plik `.env` w głównym katalogu projektu:
+   ```env
+   HF_TOKEN=twoj_token_hugging_face_read
+   ```
+   *Jest to wymagane, aby skrypty konwersji mogły pobrać konfigurację modelu bazowego (Bielik).*
+
+### 3. Przygotowanie Ollama
 1. Zainstaluj [Ollama](https://ollama.ai/).
 2. Pobierz bazowy model Bielik (lub zaimportuj z Modelfile):
    ```bash
    ollama create bielik-4.5b -f ./model/Modelfile
    ```
 
-### 3. Konfiguracja Backend (Windows)
+### 4. Konfiguracja Backend (Windows)
 1. Przejdź do folderu `backend`.
 2. Zainstaluj zależności:
    ```bash
@@ -33,15 +44,16 @@ System do wykrywania technik manipulacji w tekstach w języku polskim, oparty na
    python -m app.main
    ```
 
-### 4. Konfiguracja Training Environment (WSL2)
+### 5. Konfiguracja Training Environment (WSL2)
 1. Otwórz terminal WSL2 (Ubuntu).
 2. Zainstaluj wymagane biblioteki:
    ```bash
-   pip install unsloth bitsandbytes accelerate torch trl datasets
+   pip install unsloth bitsandbytes accelerate torch trl datasets gguf
    ```
+   *Uwaga: `gguf` jest wymagany do konwersji adapterów.*
 3. Upewnij się, że masz dostęp do GPU (`nvidia-smi` wewnątrz WSL).
 
-### 5. Konfiguracja Frontend (Windows)
+### 6. Konfiguracja Frontend (Windows)
 1. Przejdź do folderu `frontend`.
 2. Zainstaluj zależności:
    ```bash
@@ -65,8 +77,9 @@ System do wykrywania technik manipulacji w tekstach w języku polskim, oparty na
 
 ## 📊 Metryki
 System mierzy:
-- **PSR (Parsing Success Rate)**: Czy model generuje poprawny JSON?
-- **F1 Score**: Skuteczność klasyfikacji technik manipulacji względem zbioru złotego.
+- **PSR (Parsing Success Rate)**: Procent odpowiedzi, które są poprawnym syntaktycznie formatem JSON.
+- **F1 Score (Strict)**: Średnia harmoniczna precyzji i czułości dla dokumentów zawierających techniki manipulacji (ignoruje puste dokumenty w zbiorze testowym).
+- **Exact Match**: Odsetek dokumentów, w których model idealnie odtworzył zbiór technik (identyczne techniki, bez nadmiarowych/brakujących).
 
 ---
 *Projekt zrealizowany w ramach pracy inżynierskiej.*

@@ -179,10 +179,10 @@ def main():
     print(f"Loading dataset from {args.data}...")
     dataset = load_dataset("json", data_files=args.data, split="train") # It's 'train' split by default for jsonl unless specified
     
-    # 3. Sample 5 items
-    print("Sampling 5 items...")
+    # 3. Sample 7 items
+    print("Sampling 7 items...")
     dataset = dataset.shuffle(seed=42)
-    sample_size = min(5, len(dataset))
+    sample_size = min(7, len(dataset))
     dataset = dataset.select(range(sample_size))
     
     # 4. Format Prompts
