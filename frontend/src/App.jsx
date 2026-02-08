@@ -94,101 +94,99 @@ function App() {
 
   return (
     <div className="app-container">
-      {showExpertMode && (
-        <aside className="expert-sidebar">
-          <div className="sidebar-header">
-            <h2>Panel Ekspercki</h2>
+      <aside className={`expert-sidebar ${showExpertMode ? 'visible' : ''}`}>
+        <div className="sidebar-header">
+          <h2>Panel Ekspercki</h2>
+        </div>
+        
+        <div className="sidebar-content">
+          <div className="field-group">
+            <label>Dataset (JSONL)</label>
+            <div className="file-input-wrapper">
+              <input type="file" onChange={handleFileUpload} />
+            </div>
           </div>
-          
-          <div className="sidebar-content">
-            <div className="field-group">
-              <label>Dataset (JSONL)</label>
-              <div className="file-input-wrapper">
-                <input type="file" onChange={handleFileUpload} />
-              </div>
+
+          <div className="progress-section">
+            <div className="progress-info">
+              <span>Postęp treningu</span>
+              <span>{trainingStatus.training_progress}%</span>
             </div>
-
-            <div className="progress-section">
-              <div className="progress-info">
-                <span>Postęp treningu</span>
-                <span>{trainingStatus.training_progress}%</span>
-              </div>
-              <div className="progress-bar">
-                <div 
-                  className="progress-fill" 
-                  style={{ width: `${trainingStatus.training_progress}%` }}
-                ></div>
-              </div>
-            </div>
-
-            <div className="progress-section">
-              <div className="progress-info">
-                <span>Ewaluacja</span>
-                <span>{trainingStatus.evaluation_progress}%</span>
-              </div>
-              <div className="progress-bar">
-                <div 
-                  className="progress-fill" 
-                  style={{ width: `${trainingStatus.evaluation_progress}%` }}
-                ></div>
-              </div>
-            </div>
-
-            <div className="stats-table">
-              <div className="stats-header">
-                <span className="col-metric">Metric</span>
-                <span className="col-val">Baseline</span>
-                <span className="col-val">New Model</span>
-              </div>
-              
-              <div className="stats-row">
-                <span className="metric-label">F1 (non-empty)</span>
-                <span className="stat-value">{trainingStatus.baseline_f1_non_empty.toFixed(4)}</span>
-                <span className={`stat-value ${trainingStatus.new_f1_non_empty >= trainingStatus.baseline_f1_non_empty ? 'positive' : ''}`}>
-                  {trainingStatus.new_f1_non_empty.toFixed(4)}
-                </span>
-              </div>
-
-              <div className="stats-row">
-                <span className="metric-label">Exact Match (all docs)</span>
-                <span className="stat-value">{trainingStatus.baseline_exact_match.toFixed(4)}</span>
-                <span className={`stat-value ${trainingStatus.new_exact_match >= trainingStatus.baseline_exact_match ? 'positive' : ''}`}>
-                  {trainingStatus.new_exact_match.toFixed(4)}
-                </span>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <button
-                onClick={handlePromote}
-                disabled={trainingStatus.status !== 'ready_to_promote'}
-                className="promote-button"
-              >
-                {trainingStatus.status === 'deploying' ? 'Wdrażanie...' : 'Wdróż model'}
-              </button>
-              
-              {/* Status Indicator Circle */}
+            <div className="progress-bar">
               <div 
-                title={`Status: ${trainingStatus.status}`}
-                style={{
-                  width: '16px', 
-                  height: '16px', 
-                  borderRadius: '50%',
-                  backgroundColor: (() => {
-                    switch (trainingStatus.status) {
-                      case 'deploying': return '#fbbf24'; // Yellow
-                      case 'deployment_success': return '#10b981'; // Green
-                      case 'deployment_error': return '#ef4444'; // Red
-                      default: return '#9ca3af'; // Gray
-                    }
-                  })(),
-                  transition: 'background-color 0.3s ease'
-                }}
+                className="progress-fill" 
+                style={{ width: `${trainingStatus.training_progress}%` }}
               ></div>
             </div>
           </div>
-        </aside>
-      )}
+
+          <div className="progress-section">
+            <div className="progress-info">
+              <span>Ewaluacja</span>
+              <span>{trainingStatus.evaluation_progress}%</span>
+            </div>
+            <div className="progress-bar">
+              <div 
+                className="progress-fill" 
+                style={{ width: `${trainingStatus.evaluation_progress}%` }}
+              ></div>
+            </div>
+          </div>
+
+          <div className="stats-table">
+            <div className="stats-header">
+              <span className="col-metric">Metric</span>
+              <span className="col-val">Baseline</span>
+              <span className="col-val">New Model</span>
+            </div>
+            
+            <div className="stats-row">
+              <span className="metric-label">F1 (non-empty)</span>
+              <span className="stat-value">{trainingStatus.baseline_f1_non_empty.toFixed(4)}</span>
+              <span className={`stat-value ${trainingStatus.new_f1_non_empty >= trainingStatus.baseline_f1_non_empty ? 'positive' : ''}`}>
+                {trainingStatus.new_f1_non_empty.toFixed(4)}
+              </span>
+            </div>
+
+            <div className="stats-row">
+              <span className="metric-label">Exact Match (all docs)</span>
+              <span className="stat-value">{trainingStatus.baseline_exact_match.toFixed(4)}</span>
+              <span className={`stat-value ${trainingStatus.new_exact_match >= trainingStatus.baseline_exact_match ? 'positive' : ''}`}>
+                {trainingStatus.new_exact_match.toFixed(4)}
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              onClick={handlePromote}
+              disabled={trainingStatus.status !== 'ready_to_promote'}
+              className="promote-button"
+            >
+              {trainingStatus.status === 'deploying' ? 'Wdrażanie...' : 'Wdróż model'}
+            </button>
+            
+            {/* Status Indicator Circle */}
+            <div 
+              title={`Status: ${trainingStatus.status}`}
+              style={{
+                width: '16px', 
+                height: '16px', 
+                borderRadius: '50%',
+                backgroundColor: (() => {
+                  switch (trainingStatus.status) {
+                    case 'deploying': return '#fbbf24'; // Yellow
+                    case 'deployment_success': return '#10b981'; // Green
+                    case 'deployment_error': return '#ef4444'; // Red
+                    default: return '#9ca3af'; // Gray
+                  }
+                })(),
+                transition: 'background-color 0.3s ease'
+              }}
+            ></div>
+          </div>
+        </div>
+      </aside>
 
       <main className="main-content">
         <header className="main-header">
