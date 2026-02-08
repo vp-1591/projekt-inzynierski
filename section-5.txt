@@ -1,0 +1,12 @@
+5. Bibliografia/źródła
+
+1.  Hsieh, C.-Y., Li, C.-L., Yeh, C.-K., Nakhost, H., Fujii, Y., Ratner, A., Krishna, R., Lee, C.-Y., & Pfister, T. (2023). *Distilling Step-by-Step! Outperforming Larger Language Models with Less Training Data and Smaller Model Sizes*. Findings of the Association for Computational Linguistics: ACL 2023. https://doi.org/10.18653/v1/2023.findings-acl.507
+2.  Lei, T., Barzilay, R., & Jaakkola, T. (2016). *Rationalizing Neural Predictions*. arXiv preprint arXiv:1606.04155. https://doi.org/10.48550/arXiv.1606.04155
+3.  Camburu, O.-M., Rocktäschel, T., Lukasiewicz, T., & Blunsom, P. (2018). *e-SNLI: Natural Language Inference with Natural Language Explanations*. arXiv preprint arXiv:1812.01193. https://doi.org/10.48550/arXiv.1812.01193
+4.  Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., & Chen, W. (2021). *LoRA: Low-Rank Adaptation of Large Language Models*. arXiv preprint arXiv:2106.09685. https://doi.org/10.48550/arXiv.2106.09685
+5.  Dettmers, T., Pagnoni, A., Holtzman, A., & Zettlemoyer, L. (2023). *QLoRA: Efficient Finetuning of Quantized LLMs*. arXiv preprint arXiv:2305.14314. https://doi.org/10.48550/arXiv.2305.14314
+6.  Han, D., & Liu, C. (2023). *Unsloth: An Open-Source Library for Faster LLM Fine-Tuning*. GitHub. https://github.com/unslothai/unsloth
+7.  Liu, X., Yan, H., Zhang, S., An, C., Qiu, X., & Lin, D. (2023). *Scaling Laws of RoPE-based Extrapolation*. arXiv preprint arXiv:2310.05209. https://doi.org/10.48550/arXiv.2310.05209
+8.  Modzelewski, A., Da San Martino, G., Savov, P., Wilczyńska, M. A., & Wierzbicki, A. (2024). *MIPD: Exploring Manipulation and Intention In a Novel Corpus of Polish Disinformation*. Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing.
+9.  SpeakLeash Team (Ociepa, K. et al.). (2024). *Bielik-4.5B-v3: Polish Large Language Model*. Technical Report. https://huggingface.co/speakleash/Bielik-4.5B-v3
+10. Yang, A., Yang, B., Zhang, B., et al. (2024). *Qwen2.5 Technical Report*. arXiv preprint arXiv:2412.15115. https://doi.org/10.48550/arXiv.2412.15115

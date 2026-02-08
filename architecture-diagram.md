@@ -20,8 +20,8 @@ graph TD
         subgraph Training ["Phase 2: Supervised Fine-Tuning (SFT)"]
             direction TB
             Bielik_Base[("Student Model<br/>Bielik-4.5B-Instruct")]:::model
-            Unsloth["Unsloth Trainer<br/>(QLoRA, 4-bit, RoPE Scaling)"]:::process
-            Adapter[("LoRA Adapter<br/>(checkpoint-2475)")]:::model
+            Unsloth["Unsloth Trainer<br/>(QLoRA, 4-bit, RoPE Scaling, 16k ctx)"]:::process
+            Adapter[("LoRA Adapter")]:::model
             
             CoT_Data --> Unsloth
             Bielik_Base --> Unsloth

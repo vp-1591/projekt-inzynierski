@@ -1,0 +1,150 @@
+============================================================
+INFERENCE REPORT: 1521 documents
+============================================================
+
+### Importance of Document-Level F1 Score ###
+Document-level F1 is crucial for evaluating multi-label classification models, especially when dealing with imbalanced datasets or documents with varying numbers of labels (including documents with no ground truth labels). Unlike traditional micro or macro F1 scores which aggregate metrics across all labels, document-level F1 assesses the quality of predictions for each individual document. This approach prevents models from artificially inflating performance by correctly predicting 'no labels' for many documents, or by performing well on frequently occurring labels while failing on rare ones. It provides a more faithful representation of the model's ability to assign the correct set of labels to each document.
+----------------------------------------------
+
+
+Parsing Success Rate (Strict JSON): 0.2005 (305/1521)
+Format Correction Rate (Recovered JSON): 0.3406 (518/1521)
+Total Parsing Success (Strict + Recovered): 0.5411 (823/1521)
+
+Mean Document-Level F1 (all docs): 0.4047
+Mean Document-Level F1 (excluding empty gold-label docs): 0.0979
+Exact-Match Accuracy: 0.3807 (579/1521)
+
+--- Confusion Matrix (per tag) ---
+Tag: 1
+  True Negatives (TN): 1520
+  False Positives (FP): 1
+  False Negatives (FN): 0
+  True Positives (TP): 0
+------------------------------
+Tag: 919
+  True Negatives (TN): 1520
+  False Positives (FP): 1
+  False Negatives (FN): 0
+  True Positives (TP): 0
+------------------------------
+Tag: ANECDOTE
+  True Negatives (TN): 1267
+  False Positives (FP): 210
+  False Negatives (FN): 35
+  True Positives (TP): 9
+------------------------------
+Tag: CHERRY_PICKING
+  True Negatives (TN): 745
+  False Positives (FP): 627
+  False Negatives (FN): 103
+  True Positives (TP): 46
+------------------------------
+Tag: CHERY_PICKING
+  True Negatives (TN): 1517
+  False Positives (FP): 4
+  False Negatives (FN): 0
+  True Positives (TP): 0
+------------------------------
+Tag: EMOTIONAL_CONTENT
+  True Negatives (TN): 871
+  False Positives (FP): 558
+  False Negatives (FN): 57
+  True Positives (TP): 35
+------------------------------
+Tag: EXAGGERATION
+  True Negatives (TN): 1278
+  False Positives (FP): 9
+  False Negatives (FN): 231
+  True Positives (TP): 3
+------------------------------
+Tag: FALSE_CAUSE
+  True Negatives (TN): 1379
+  False Positives (FP): 47
+  False Negatives (FN): 89
+  True Positives (TP): 6
+------------------------------
+Tag: LEADING_QUESTIONS
+  True Negatives (TN): 1472
+  False Positives (FP): 34
+  False Negatives (FN): 15
+  True Positives (TP): 0
+------------------------------
+Tag: MISLEADING_CLICKBAI
+  True Negatives (TN): 1508
+  False Positives (FP): 0
+  False Negatives (FN): 13
+  True Positives (TP): 0
+------------------------------
+Tag: MISLEADING_CLICKBAIT
+  True Negatives (TN): 1492
+  False Positives (FP): 29
+  False Negatives (FN): 0
+  True Positives (TP): 0
+------------------------------
+Tag: QUOTE_MINING
+  True Negatives (TN): 1492
+  False Positives (FP): 15
+  False Negatives (FN): 14
+  True Positives (TP): 0
+------------------------------
+Tag: REFERENCE_ERROR
+  True Negatives (TN): 1369
+  False Positives (FP): 33
+  False Negatives (FN): 115
+  True Positives (TP): 4
+------------------------------
+Tag: STRAWMAN
+  True Negatives (TN): 1282
+  False Positives (FP): 202
+  False Negatives (FN): 30
+  True Positives (TP): 7
+------------------------------
+Tag: WHATABOUTISM
+  True Negatives (TN): 1440
+  False Positives (FP): 44
+  False Negatives (FN): 36
+  True Positives (TP): 1
+------------------------------
+
+--- Sample Results (First 10) ---
+F1_Doc     | Exact Match  | Ground Truth                   | Model Output (Reasoning & Tags)                                                 
+---------------------------------------------------------------------------------------------------------------------------------------
+1.0000     | True         | []                             | ```json
+{
+    "reasoning": "Tekst wykorzystuje kilka technik manipulacji, aby wp..
+0.0000     | False        | []                             | ```json
+{
+  "reasoning": "W tekście zidentyfikowano technikę **CHERRY_PICKING**,..
+1.0000     | True         | []                             | {
+    "reasoning": "Tekst zawiera kilka technik manipulacji, w tym: *\"CHERRY_PI..
+0.0000     | False        | ['REFERENCE_ERROR']            | {
+  "reasoning": "Tekst zawiera liczne techniki manipulacji, w tym: *\"WHATABOUT..
+0.0000     | False        | ['REFERENCE_ERROR', 'EMOTIONAL_CONTENT', 'FALSE_CAUSE'].. | **Output:**
+
+```json
+{
+    "reasoning": "Tekst wykorzystuje kilka technik manipu..
+0.0000     | False        | []                             | **Output:**
+
+```json
+{
+    "reasoning": "Tekst wykorzystuje kilka technik manipu..
+1.0000     | True         | []                             | **Output:**
+
+```json
+{
+    "reasoning": "Tekst wykorzystuje kilka technik manipu..
+0.3333     | False        | ['REFERENCE_ERROR', 'EMOTIONAL_CONTENT', 'ANECDOTE'].. | **Output:**
+
+```json
+{
+    "reasoning": "Tekst wykorzystuje kilka technik manipu..
+1.0000     | True         | []                             | **Output:**
+
+```json
+{
+    "reasoning": "Tekst wykorzystuje kilka technik manipu..
+0.0000     | False        | []                             | ```json
+{
+  "reasoning": "Tekst wykorzystuje kilka technik manipulacji, w tym **..

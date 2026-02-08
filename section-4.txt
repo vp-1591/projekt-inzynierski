@@ -1,0 +1,24 @@
+4. Wnioski i perspektywy rozwoju
+
+Główny cel pracy, zdefiniowany jako zaprojektowanie i implementacja kompletnego systemu informatycznego do detekcji manipulacji w tekstach polskojęzycznych, został zrealizowany. Powstał w pełni funkcjonalny artefakt inżynierski, który integruje zaawansowane modele językowe (LLM) z nowoczesną architekturą aplikacji internetowej.
+
+Udało się skutecznie rozwiązać kluczowe wyzwania techniczne:
+*   Zaadaptowano model Bielik-4.5B do specyficznego zadania detekcji błędów logicznych poprzez proces Supervised Fine-Tuning (SFT) z wykorzystaniem techniki QLoRA.
+*   Zrozumiano i zaimplementowano proces destylacji wiedzy (Knowledge Distillation) w celu wygenerowania wyjaśnień w języku naturalnym (NLE), co nadało systemowi cechę wyjaśnialności (XAI).
+*   Zbudowano kompletną pętlę MLOps (Machine Learning Operations), umożliwiającą automatyczne douczanie i wdrażanie modelu w trybie ciągłym (Human-in-the-Loop), co wykracza poza standardowy zakres prac inżynierskich.
+
+System działa lokalnie, wykorzystując optymalizacje (kwantyzacja 4-bitowa, runtime adapter loading), co czyni go dostępnym bez konieczności inwestowania w kosztowną infrastrukturę chmurową. Osiągnięto kompromis między jakością detekcji a wymaganiami sprzętowymi, dostarczając narzędzie gotowe do dalszego rozwoju.
+
+Perspektywy rozwoju
+
+Zidentyfikowane w toku prac ograniczenia projektu wyznaczają bezpośrednie kierunki jego dalszego rozwoju:
+
+1.  Rozbudowa infrastruktury i skalowanie: Obecna wersja systemu, będąca prototypem (Proof-of-Concept), jest ograniczona zasobami sprzętu konsumenckiego. Naturalnym krokiem jest migracja rozwiązania na środowisko serwerowe z profesjonalnymi układami GPU (VRAM > 24GB). Pozwoliłoby to na pełne wykorzystanie okna kontekstowego modelu (do 32k tokenów) bez kompromisów wydajnościowych oraz obsługę wielu żądań jednocześnie.
+
+2.  Automatyczna Walidacja Wyjaśnień (LLM-as-a-Judge): Ze względu na skalę zbioru danych, ręczna ocena tysięcy wyjaśnień przez ekspertów jest nieefektywna kosztowo i czasowo. Perspektywicznym kierunkiem jest wdrożenie metodologii "LLM-as-a-Judge", w której potężny model językowy (np. GPT-4) ocenia spójność i poprawność logiczną generowanych przez system wyjaśnień (NLE). Rola ludzkiego eksperta ograniczałaby się wówczas do weryfikacji reprezentatywnej, losowej próbki ocen modelowych, co pozwoliłoby na skalowalną walidację jakości modułu XAI.
+
+3.  Zbalansowanie i rozszerzenie zbioru danych: Aby zredukować "konserwatywność" modelu (tendencję do nieoznaczania technik w przypadkach niejednoznacznych), należy wzbogacić zbiór treningowy o większą liczbę przykładów pozytywnych (zawierających manipulację), redukując relatywną nadreprezentację próbek pustych. Możliwe jest również rozszerzenie taksonomii wykrywanych błędów o nowe kategorie.
+
+4.  Wdrożenie zaawansowanych mechanizmów bezpieczeństwa: Ewentualne wdrożenie produkcyjne wymaga zastąpienia obecnego, uproszczonego modułu logowania pełnym systemem uwierzytelniania i autoryzacji opartym na rolach (RBAC). Pozwoli to na bezpieczne audytowanie zmian wprowadzanych przez ekspertów do zbioru treningowego "Złotych Próbek".
+
+5.  Mitygacja stronniczości (Bias Mitigation): Istotnym kierunkiem badawczym jest analiza i eliminacja potencjalnych uprzedzeń, które model mógł odziedziczyć w procesie destylacji wiedzy od modelu "Nauczyciela". Opracowanie metod filtracji danych treningowych pod kątem neutralności światopoglądowej zwiększy obiektywność systemu.

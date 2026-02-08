@@ -1,0 +1,83 @@
+2. Kluczowe zagadnienia związane z realizacją projektu
+
+Realizacja systemu detekcji dezinformacji wymagała rozwiązania szeregu problemów inżynieryjnych z zakresu przetwarzania języka naturalnego (NLP), optymalizacji modeli głębokiego uczenia oraz architektury systemów rozproszonych. Poniżej przedstawiono kluczowe aspekty implementacyjne z podziałem na etapy wytwarzania oprogramowania, uwzględniające rzeczywiste parametry i wyniki uzyskane w toku prac.
+
+2.1. Cele i charakterystyka inżynierska projektu
+
+Zasadniczym celem pracy było zaprojektowanie i implementacja kompletnego systemu informatycznego (end-to-end) zdolnego do wykrywania technik manipulacji w tekstach polskojęzycznych wraz z generowaniem zrozumiałych dla człowieka wyjaśnień decyzji (Explainable AI). Projekt koncentrował się na stworzeniu działającego artefaktu inżynierskiego, który integruje nowoczesne modele językowe w spójną architekturę aplikacyjną.
+
+Co było celem:
+Stworzenie działającego prototypu systemu MLOps, który umożliwia nie tylko inferencję, ale także ciągłe douczanie modelu (Human-in-the-Loop) w oparciu o interakcję z ekspertem. Kluczowe było rozwiązanie problemów integracyjnych (backend, frontend, obsługa GPU) oraz optymalizacja modelu 4.5B parametrów do działania na sprzęcie konsumenckim.
+
+Co nie było celem:
+Celem pracy nie było przeprowadzanie wyczerpujących badań porównawczych wielu architektur sieci neuronowych ani tworzenie nowych architektur modeli fundamentalnych. Nie dążono również do osiągnięcia wyników State-of-the-Art (SOTA) w rozumieniu akademickim za wszelką cenę, lecz do uzyskania kompromisu między jakością detekcji a użytecznością i szybkością działania systemu lokalnego.
+
+Uzasadnienie spełnienia kryteriów pracy inżynierskiej:
+Projekt wykracza poza teoretyczną analizę problemu, dostarczając w pełni funkcjonalne oprogramowanie. Wymagał on doboru odpowiednich narzędzi (Unsloth, Ollama, FastAPI), zaprojektowania bazy danych, implementacji algorytmów przetwarzania tekstu oraz stworzenia interfejsu użytkownika. Stanowi więc klasyczny przykład inżynierii oprogramowania połączonej z inżynierią danych.
+
+2.2. Implementacja procesu generowania danych syntetycznych (NLE i Rationale Generation)
+
+Jednym z największych wyzwań projektu był brak zbioru danych zawierającego nie tylko etykiety (np. "REFERENCE_ERROR"), ale również wyjaśnienia w języku naturalnym (Natural Language Explanations - NLE). Zgodnie z literaturą (Camburu et al., 2018), systemy NLE mają na celu generowanie tekstowego wyjaśnienia decyzji klasyfikatora, co jest kluczowe dla budowania zaufania użytkownika.
+
+Wyzwanie implementacyjne:
+Konieczność wygenerowania tysięcy wysokiej jakości uzasadnień dla zbioru MIPD (Modzelewski et al., 2024) (ponad 10 000 próbek) przy konieczności zachowania spójności formatu JSON. Istotnym aspektem było tzw. Rationale Generation (Lei et al., 2016), czyli proces ekstrakcji fragmentów tekstu źródłowego, które bezpośrednio uzasadniają predykcję.
+
+Zastosowane rozwiązanie:
+Zaimplementowano autorski potok (pipeline) generacji metodologią "Teacher-Student" (Hsieh et al., 2023) z wykorzystaniem modelu Qwen-2.5-7B-Instruct (Yang et al., 2024) jako "Nauczyciela". Proces ten zrealizowano w środowisku chmurowym Google Colab z wykorzystaniem biblioteki Unsloth (Han & Liu, 2023) dla optymalizacji pamięci VRAM (model 4-bitowy). Wybór modelu Nauczyciela o parametrach 7B podyktowany był potrzebą zapewnienia wysokiej jakości merytorycznej generowanych wyjaśnień oraz ścisłego przestrzegania schematu JSON, co w przypadku mniejszych modeli stanowiłoby ryzyko niestabilności formatu.
+
+Kluczowym elementem implementacji był skrypt Python (synthetic_data_gen.ipynb), który wymuszał na modelu przestrzeganie reguł "Hard-Constraint Generation":
+Iteracyjna walidacja (Retry Loop): Zaimplementowano pętlę ponawiania prób. Jeśli model wygenerował odpowiedź niepoprawną składniowo (nie zawierającą techniki manipulacji), system automatycznie ponawiał zapytanie.
+Mechanizm wznawiania (Resume Logic): Ze względu na czasochłonność procesu, zaimplementowano system punktów kontrolnych (checkpoints), zapobiegający utracie danych w przypadku rozłączenia sesji Colab.
+Separacja logiki: Model generował treść wyjaśnienia, a struktura JSON była składana programowo, co eliminowało błędy składniowe.
+
+2.3. Metodyka dostrajania modelu (Supervised Fine-Tuning)
+
+Sercem systemu jest model Bielik-4.5B-Instruct (SpeakLeash Team, 2024). Bezpośrednie użycie modelu bazowego dawało wyniki niesatysfakcjonujące w kontekście specyficznego zadania detekcji manipulacji, co wymusiło proces dostrajania (Fine-Tuning).
+
+Wyzwanie implementacyjne:
+Standardowy trening modelu o 4.5 miliarda parametrów wymagał optymalizacji pamięciowej oraz obsługi długich tekstów (artykuły z datasetu MIPD często przekraczają standardowe okna kontekstowe).
+
+Zastosowane rozwiązanie:
+Zastosowano technikę QLoRA (Dettmers et al., 2023) z wykorzystaniem biblioteki Unsloth. Pozwoliło to na zamrożenie głównych wag modelu (zapisanych w formacie 4-bitowym NF4) i trenowanie jedynie niewielkich macierzy adapterów (Hu et al., 2021).
+
+W celu obsługi długich tekstów zaimplementowano strategię Long Context z wykorzystaniem RoPE Scaling (Liu et al., 2023). W konfiguracji trenera ustawiono parametr max_seq_length = 16384, co w połączeniu z gradient_checkpointing umożliwiło trening na dostępnych zasobach (w Colabie). Model prototypowy osiągnął wynik F1 na poziomie 0.7824 na zbiorze testowym, dowodząc technicznej wykonalności przyjętej koncepcji.
+
+2.4. Architektura inferencji i konwersja modelu
+
+Kluczowym wymaganiem projektowym była optymalizacja procesu inferencji, aby umożliwić działanie modelu w środowisku o ograniczonych zasobach, przy jednoczesnym zachowaniu akceptowalnego czasu odpowiedzi.
+
+Wyzwanie implementacyjne:
+Uruchomienie modelu o długim kontekście (16k tokenów) z zachowaniem interaktywności i precyzji odpowiedzi ustrukturyzowanych (JSON).
+
+Zastosowane rozwiązanie:
+Zastosowano architekturę Runtime Adapter Loading w serwerze Ollama. Podejście to polega na dynamicznym ładowaniu adaptera LoRA na wysokiej jakości model bazowy (Bielik-4.5B w kwantyzacji 8-bitowej). W pliku konfiguracyjnym Modelfile ustawiono temperaturę generacji na 0.1 oraz zdefiniowano precyzyjny szablon ChatML, co jest kluczowe dla determinizmu zwracanych struktur danych.
+
+2.5. Implementacja systemu automatycznej ewaluacji (Auto-Benchmark)
+
+W projektach opartych na LLM, gdzie wyjście jest tekstem strukturalnym (JSON), standardowe metryki (jak accuracy) są niewystarczające. Zaimplementowano autorski system ewaluacji (`benchmark.py`), który analizuje odpowiedzi modelu na wydzielonym zbiorze testowym w trzech wymiarach:
+
+1. Wskaźnik Sukcesu Parsowania (Parsing Success Rate - PSR): Techniczna metryka weryfikująca, czy odpowiedź modelu jest poprawnym obiektem JSON. Skrypt podejmuje dwie próby deserializacji: ścisłą (strict JSON) oraz opartą na wyrażeniach regularnych (regex recovery), aby odzyskać strukturę nawet w przypadku drobnych błędów formatowania (np. brak klamry zamykającej). Wysoki PSR (>95%) jest warunkiem koniecznym do wdrożenia.
+2. Zgodność z etykietami (Exact-Match Accuracy): Odsetek dokumentów, w których model idealnie odtworzył zbiór technik (zbiór predykcji jest identyczny ze zbiorem referencyjnym). Jest to bardzo rygorystyczna miara, karząca za każdą nadmiarową lub brakującą etykietę.
+3. Wydajność Klasyfikacji (Mean Document-Level F1 - excluding empty gold-label docs): Główna metryka decyzyjna. Obliczana jako średnia harmoniczna precyzji i czułości (F1) liczona niezależnie dla każdego dokumentu, ale tylko dla tych próbek, które w rzeczywistości zawierają techniki manipulacji (niepuste gold labels).
+   *   Uzasadnienie: Ze względu na niezbalansowanie zbioru danych (duża liczba "czystych" artykułów), wliczanie pustych przykładów sztucznie zawyżałoby wynik (model łatwo uczy się przewidywać pustą listę). Skupienie się na niepustych przykładach pozwala ocenić rzeczywistą zdolność modelu do detekcji manipulacji, a nie tylko jego tendencję do bycia konserwatywnym.
+
+System ewaluacji jest w pełni zautomatyzowany i zintegrowany z backendem – po każdym cyklu douczania uruchamiany jest na losowej próbce danych testowych, a wynik F1 decyduje o promocji modelu na produkcję.
+
+2.6. Projekt i architektura Systemu Inżynierskiego (MLOps Loop)
+
+Istotą projektu jako pracy inżynierskiej jest transformacja statycznego modelu w adaptujący się system. Zaprojektowano architekturę MLOps typu "Human-in-the-Loop", składającą się z:
+
+1. Backendu Orkiestracyjnego: Serwisu w Pythonie, który monitoruje przyrost danych i zarządza procesami w tle.
+2. Automatyzacji Treningu (Trigger & Retraining): Mechanizmu, który po zebraniu odpowiedniej liczby nowych próbek automatycznie uruchamia proces douczania, wykorzystując techniki zapobiegające "katastrofalnemu zapominaniu" (Replay Buffer).
+3. Automatycznego Wdrożenia (Hot-Swap): Logiki decyzyjnej, która na podstawie wyników benchmarku automatycznie podmienia model na produkcji (bez przerywania dostępności usługi), tylko jeśli nowa wersja osiąga lepsze wyniki F1.
+
+2.7. Ograniczenia projektu
+
+Jako realizacja inżynierska, projekt posiada pewne ograniczenia wynikające z przyjętego zakresu prac oraz dostępnych zasobów:
+
+Ograniczenia infrastrukturalne: Ze względu na ograniczone zasoby sprzętowe (brak dostępu do środowiska serwerowego z dużą ilością pamięci VRAM), system został wdrożony i przetestowany w środowisku lokalnym jako Proof-of-Concept. Uniemożliwiło to pełne testy wydajnościowe z maksymalnym wykorzystaniem okna kontekstowego (16k-32k tokenów) w warunkach produkcyjnego obciążenia.
+Niezbalansowanie zbioru danych: Zbiór treningowy charakteryzuje się znaczną nadreprezentacją próbek pustych (brak technik manipulacji), co wpływa na "konserwatywność" modelu – tendencję do nieoznaczania technik w przypadkach niejednoznacznych, aby zminimalizować liczbę fałszywych alarmów.
+Uproszczona autoryzacja eksperta: Funkcjonalność logowania eksperta została zaimplementowana w formie uproszczonego przełącznika interfejsu (mock), pomijając zaawansowane mechanizmy uwierzytelniania (RBAC), co byłoby wymagane przy wdrożeniu komercyjnym.
+Brak formalnej walidacji jakości wyjaśnień: Oceniono głównie poprawność klasyfikacji (wykrycie tagu). Jakość generowanych wyjaśnień (NLE) nie została poddana rygorystycznej ocenie z udziałem grupy sędziów kompetentnych (human evaluation), co jest standardem w pracach ściśle badawczych.
+Zależność od jakości danych syntetycznych: Skuteczność modelu jest bezpośrednio skorelowana z jakością danych wygenerowanych przez model "Nauczyciela". Ewentualne błędy w rozumowaniu modelu Qwen-2.5-7B mogły zostać powielone w procesie destylacji.
+Ryzyko biasu w procesie destylacji: Istnieje ryzyko, że model przejął pewne uprzedzenia (bias) zawarte w modelu Nauczyciela, co jest typowym zjawiskiem w procesie Knowledge Distillation.

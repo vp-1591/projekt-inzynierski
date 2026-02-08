@@ -1,3 +1,4 @@
+
 ============================================================
 INFERENCE REPORT: 1521 documents
 ============================================================
@@ -11,7 +12,7 @@ Parsing Success Rate (Strict JSON): 0.9993 (1520/1521)
 Format Correction Rate (Recovered JSON): 0.0000 (0/1521)
 Total Parsing Success (Strict + Recovered): 0.9993 (1520/1521)
 
-Mean Document-Level F1 (all docs): 0.1205
+Mean Document-Level F1 (all docs): 0.8305
 Mean Document-Level F1 (excluding empty gold-label docs): 0.4912
 Exact-Match Accuracy: 0.7291 (1109/1521)
 
@@ -86,11 +87,11 @@ Tag: WHATABOUTISM
 --- Sample Results (First 10) ---
 F1_Doc     | Exact Match  | Ground Truth                   | Model Output (Reasoning & Tags)                                                 
 ---------------------------------------------------------------------------------------------------------------------------------------
-0.0000     | True         | []                             | ```json
+1.0000     | True         | []                             | ```json
 {"discovered_techniques": []}                                           
-0.0000     | True         | []                             | ```json
+1.0000     | True         | []                             | ```json
 {"discovered_techniques": []}                                           
-0.0000     | True         | []                             | ```json
+1.0000     | True         | []                             | ```json
 {"discovered_techniques": []}                                           
 0.5000     | False        | ['REFERENCE_ERROR']            | ```json
 {"discovered_techniques": ["REFERENCE_ERROR", "CHERRY_PICKING", "EXAGGER..
@@ -98,12 +99,12 @@ F1_Doc     | Exact Match  | Ground Truth                   | Model Output (Reaso
 {"discovered_techniques": ["REFERENCE_ERROR", "CHERRY_PICKING", "EXAGGER..
 0.0000     | False        | []                             | ```json
 {"discovered_techniques": ["CHERRY_PICKING", "EXAGGERATION"]}           
-0.0000     | True         | []                             | ```json
+1.0000     | True         | []                             | ```json
 {"discovered_techniques": []}                                           
 0.6667     | False        | ['REFERENCE_ERROR', 'EMOTIONAL_CONTENT', 'ANECDOTE'].. | ```json
 {"discovered_techniques": ["REFERENCE_ERROR", "EMOTIONAL_CONTENT", "EXAG..
-0.0000     | True         | []                             | ```json
+1.0000     | True         | []                             | ```json
 {"discovered_techniques": []}                                           
-0.0000     | True         | []                             | ```json
+1.0000     | True         | []                             | ```json
 {"discovered_techniques": []}                                           
 ---------------------------------------------------------------------------------------------------------------------------------------
