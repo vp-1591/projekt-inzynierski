@@ -209,7 +209,7 @@ function App() {
 
         <div className="content-wrapper">
           <section className="analyze-section">
-            <InputSection onAnalyze={handleAnalyze} isLoading={isAnalyzing} />
+            <InputSection onAnalyze={handleAnalyze} isAnalyzing={isAnalyzing} />
           </section>
 
           {error && (

@@ -79,7 +79,10 @@ export async function analyzeText(text) {
 
     // Map tags to user-friendly names
     const techniques = tags.map(tag => {
-      const info = TECHNIQUE_MAPPING[tag] || { name: tag };
+      const info = TECHNIQUE_MAPPING[tag] || { 
+        name: tag, 
+        description: "Nierozpoznana technika (możliwa halucynacja modelu)" 
+      };
       return {
         name: info.name,
         description: info.description
