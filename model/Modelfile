@@ -1,5 +1,5 @@
-FROM C:/Users/vadim/Documents/Vadym/GitRep/projekt-inzynierski/model/bielik-4.5b-base/Bielik-4.5B-v3.0-Instruct.Q8_0.gguf
-ADAPTER c:/Users/vadim/Documents/Vadym/GitRep/projekt-inzynierski/backend/model/latest/adapter_gguf/speakleash-Bielik-4.5B-v3.0-Instruct-F32-LoRA.gguf
+FROM ./bielik-4.5b-base/Bielik-4.5B-v3.0-Instruct.Q8_0.gguf
+ADAPTER ./xai-adapter/checkpoint-2475/checkpoint-2475-F32-LoRA.gguf
 
 # 2. Parameters
 PARAMETER temperature 0.1

@@ -81,3 +81,28 @@ Uproszczona autoryzacja eksperta: Funkcjonalność logowania eksperta została z
 Brak formalnej walidacji jakości wyjaśnień: Oceniono głównie poprawność klasyfikacji (wykrycie tagu). Jakość generowanych wyjaśnień (NLE) nie została poddana rygorystycznej ocenie z udziałem grupy sędziów kompetentnych (human evaluation), co jest standardem w pracach ściśle badawczych.
 Zależność od jakości danych syntetycznych: Skuteczność modelu jest bezpośrednio skorelowana z jakością danych wygenerowanych przez model "Nauczyciela". Ewentualne błędy w rozumowaniu modelu Qwen-2.5-7B mogły zostać powielone w procesie destylacji.
 Ryzyko biasu w procesie destylacji: Istnieje ryzyko, że model przejął pewne uprzedzenia (bias) zawarte w modelu Nauczyciela, co jest typowym zjawiskiem w procesie Knowledge Distillation.
+
+2.8. Analiza wydajności i wyniki eksperymentalne
+
+Przeprowadzono analizę porównawczą trzech wariantów modelu:
+1. No Adapter: Model bazowy (Bielik-4.5B-Instruct) bez dostrajania.
+2. Prototype Adapter: Model dostrojony pod kątem precyzji klasyfikacji (maksymalizacja F1).
+3. XAI Adapter: Model dostrojony do generowania zarówno etykiet, jak i wyjaśnień (Reasoning).
+
+Tabela 1. Zestawienie wyników ewaluacji (zbiór testowy N=1521).
+
+Metryka                                  | No Adapter | Prototype Adapter | XAI Adapter
+-----------------------------------------|------------|-------------------|------------
+Parsing Success Rate (Strict)            | 20.05%     | 99.93%            | 96.25%
+Mean Document-Level F1 (Non-empty docs)  | 0.0979     | 0.4912            | 0.2847
+Exact-Match Accuracy                     | 38.07%     | 72.91%            | 73.18%
+
+Analiza wyników:
+* Wpływ dostrajania: Model bazowy ("No Adapter") wykazuje krytycznie niską zdolność do formowania poprawnego wyjścia JSON (PSR 20%), co dyskwalifikuje go z zastosowań produkcyjnych. Dostrajanie (Adaptery) podnosi stabilność formatu do poziomu >96%.
+* Wpływ jakości generowanych wyjaśnień (XAI): Teoretycznie integracja warstwy wyjaśnialności powinna wspierać precyzję klasyfikacji poprzez wymuszenie głębszej analizy tekstu. Obserwowany spadek skuteczności wariantu "XAI" (F1 0.28 vs 0.49) wskazuje jednak na wpływ jakości danych trenujących w zakresie wyjaśnień (NLE). Jak wskazano w sekcji ograniczeń ("Brak formalnej walidacji jakości wyjaśnień"), model "Nauczyciela" mógł generować halucynacje lub błędne uzasadnienia, które model "Ucznia" następnie powielił, co paradoksalnie zaburzyło proces decyzyjny zamiast go wspomóc. Potwierdza to kluczową rolę weryfikacji jakości danych w procesie destylacji wiedzy.
+
+Analiza Macierzy Pomyłek (Sekcja 3):
+Analiza macierzy pomyłek (zawartych w Sekcji 3) potwierdza te obserwacje:
+* Adapter Prototype najskuteczniej identyfikuje subtelne techniki jak EXAGGERATION (187 TP) czy CHERRY_PICKING (101 TP).
+* Adapter XAI przyjmuje strategię bardziej konserwatywną, częściej "przeoczając" techniki (więcej False Negatives), np. dla EXAGGERATION wykrył 128 przypadków.
+* Model bez adaptera w większości przypadków nie wykrywa technik (ogromna przewaga False Negatives nad True Positives dla niemal wszystkich klas), co potwierdza konieczność treningu specyficznego dla domeny detekcji dezinformacji.

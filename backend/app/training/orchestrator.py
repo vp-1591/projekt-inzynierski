@@ -56,7 +56,7 @@ class MLOpsOrchestrator:
             return result
 
     def start_manual_training(self, file_path: str):
-        if self.status != "idle":
+        if self.status not in ["idle", "deployment_success", "deployment_error", "ready_to_promote"]:
             return False
             
         self.status = "training"

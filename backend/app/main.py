@@ -18,7 +18,7 @@ app.add_middleware(
 )
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
-MODEL_NAME = "bielik-xai-mipd:latest"
+MODEL_NAME = "bielik-lora-mipd:latest"
 
 class AnalysisRequest(BaseModel):
     text: str
@@ -119,7 +119,7 @@ async def promote_model(orchestrator: MLOpsOrchestrator = Depends(get_orchestrat
         raise HTTPException(status_code=400, detail="Not ready to promote")
     
     await orchestrator.deploy_new_adapter(orchestrator.latest_adapter_path)
-    orchestrator.status = "idle"
+    # orchestrator.status = "idle"  <-- Removed to persist success state for UI
     return {"status": "promoted"}
 
 @app.post("/training/progress")

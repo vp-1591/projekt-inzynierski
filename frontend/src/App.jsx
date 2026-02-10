@@ -178,6 +178,7 @@ function App() {
                     case 'deploying': return '#fbbf24'; // Yellow
                     case 'deployment_success': return '#10b981'; // Green
                     case 'deployment_error': return '#ef4444'; // Red
+                    case 'ready_to_promote': return '#3b82f6'; // Blue
                     default: return '#9ca3af'; // Gray
                   }
                 })(),
