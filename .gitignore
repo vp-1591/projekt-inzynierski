@@ -23,6 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 *.gguf
+*.bin
 *.safetensors
 *.pt
 *.pth
@@ -31,6 +32,9 @@ dist-ssr
 
 /backend/unsloth_compiled_cache
 /model/*
-!/model/benchmark-reports
+# benchmark-reports are now ignored
 !/model/Modelfile
 .env
+section-*.txt
+report.txt
+**/benchmark_report_*.txt
