@@ -29,7 +29,7 @@ Przewaga proponowanego rozwiązania opiera się na trzech filarach. Po pierwsze,
 `Należy wymienić każdą z istotnych zastosowanych technologii, w której opracowano fragmenty kodu, wizualizacji, diagramów, itd., itp. Nie należy wymieniać wszystkich składowych bibliotek i zależności, które zostały np. automatycznie zaimportowane w wyniku procesu pobierania wtyczek w danej technologii, np.:`
 - Modele Językowe (LLM): Bielik-4.5B-Instruct, Qwen-2.5-7B-Instruct.
 - Biblioteki i Frameworki ML: Unsloth, Hugging Face Transformers, Hugging Face PEFT.
-- Serwery i Backend: Ollama, Python (FastAPI).
+- Serwery i Backend: Ollama (oparty na llama.cpp), Python (FastAPI).
 - Frontend: React.js.
 - Sprzęt i Środowisko: Google Colab (T4 GPU), lokalna stacja robocza (GPU NVIDIA).
 ### Opis stosu technologicznego i uzasadnienie wybranych technologii	
@@ -42,7 +42,7 @@ Unsloth (Trening i Optymalizacja):
 •	Uzasadnienie: Unsloth umożliwia trenowanie modeli LLM nawet 2x szybciej i przy zużyciu o 60% mniej pamięci VRAM niż standardowe metody. Pozwala to na przeprowadzenie procesu SFT (Supervised Fine-Tuning) na darmowej instancji Google Colab (T4 GPU), co czyni projekt wykonalnym bez dostępu do klastrów obliczeniowych.
 Ollama (Serwer Inferencji):
 •	Rola: Lokalny serwer udostępniający model poprzez REST API.
-•	Uzasadnienie: Ollama automatyzuje zarządzanie modelem, obsługuje wydajny format GGUF (kwantyzacja) i udostępnia proste API kompatybilne z aplikacjami webowymi. Eliminuje konieczność pisania skomplikowanego kodu w Pythonie do obsługi ładowania modelu i tokenizacji w środowisku produkcyjnym.
+•	Uzasadnienie: Ollama automatyzuje zarządzanie modelem, obsługując wydajny format GGUF (technologia llama.cpp) i udostępniając proste API kompatybilne z aplikacjami webowymi. Eliminuje konieczność pisania skomplikowanego kodu w Pythonie do obsługi ładowania modelu i tokenizacji w środowisku produkcyjnym.
 Python (FastAPI) & React.js:
 •	Rola: Orkiestracja procesów (Backend) i interfejs użytkownika (Frontend).
 •	Uzasadnienie: FastAPI jest nowoczesnym, asynchronicznym frameworkiem idealnym do obsługi długotrwałych zadań w tle (jak trenowanie modelu w fazie 4). React.js zapewnia responsywny interfejs, który może dynamicznie wyświetlać strumieniowane odpowiedzi z modelu (efekt pisania na żywo).
@@ -78,7 +78,7 @@ Projekt wykracza poza teoretyczną analizę problemu, dostarczając w pełni fun
 
 ### 2.2. Implementacja procesu generowania danych syntetycznych (NLE i Rationale Generation)
 
-Jednym z największych wyzwań projektu był brak zbioru danych zawierającego nie tylko etykiety (np. "REFERENCE_ERROR"), ale również wyjaśnienia w języku naturalnym (Natural Language Explanations - NLE). Zgodnie z literaturą (Camburu et al., 2018), systemy NLE mają na celu generowanie tekstowego wyjaśnienia decyzji klasyfikatora, co jest kluczowe dla budowania zaufania użytkownika.
+Jednym z największych wyzwań projektu był brak zbioru danych zawierającego nie tylko etykiety (np. "REFERENCE_ERROR"), ale również wyjaśnienia w języku naturalnym (Natural Language Explanations - NLE). Koncepcja NLE, wprowadzona m.in. przez Camburu et al. (2018), zakłada generowanie tekstowego uzasadnienia decyzji klasyfikatora, co jest kluczowe dla budowania zaufania użytkownika w systemach Explainable AI (XAI). Podwaliny pod to podejście położyły również prace takie jak Lei et al. (2016), koncentrujące się na ekstrakcji fragmentów tekstu uzasadniających predykcję (Rationale Generation). Ścisłe powiązanie klasyfikacji z generowaniem uzasadnień zapobiega tworzeniu modeli typu "czarna skrzynka".
 
 Wyzwanie implementacyjne:
 Konieczność wygenerowania tysięcy wysokiej jakości uzasadnień dla zbioru MIPD (Modzelewski et al., 2024) (ponad 10 000 próbek) przy konieczności zachowania spójności formatu JSON. Istotnym aspektem było tzw. Rationale Generation (Lei et al., 2016), czyli proces ekstrakcji fragmentów tekstu źródłowego, które bezpośrednio uzasadniają predykcję.
@@ -89,7 +89,14 @@ Zaimplementowano autorski potok (pipeline) generacji metodologią "Teacher-Stude
 Kluczowym elementem implementacji był skrypt Python (synthetic_data_gen.ipynb), który wymuszał na modelu przestrzeganie reguł "Hard-Constraint Generation":
 Iteracyjna walidacja (Retry Loop): Zaimplementowano pętlę ponawiania prób. Jeśli model wygenerował odpowiedź niepoprawną składniowo (nie zawierającą techniki manipulacji), system automatycznie ponawiał zapytanie.
 Mechanizm wznawiania (Resume Logic): Ze względu na czasochłonność procesu, zaimplementowano system punktów kontrolnych (checkpoints), zapobiegający utracie danych w przypadku rozłączenia sesji Colab.
-Separacja logiki: Model generował treść wyjaśnienia, a struktura JSON była składana programowo, co eliminowało błędy składniowe.
+Separacja logiki: Model generował treść wyjaśnienia, a struktura JSON była składana programowo, co eliminowało błędy składniowe. W docelowym systemie (XAI Adapter) model jest trenowany, aby na wyjściu zwracać spójną strukturę zawierającą listę zidentyfikowanych technik oraz pole uzasadnienia (reasoning):
+
+```json
+{
+  "reasoning": "Na podstawie analizy podanych fragmentów, tekst wykazuje cechy selektywnego doboru faktów, co w połączeniu z wyolbrzymieniem skali zjawiska służy budowaniu narracji...",
+  "discovered_techniques": ["CHERRY_PICKING", "EXAGGERATION"]
+}
+```
 
 ### 2.3. Metodyka dostrajania modelu (Supervised Fine-Tuning)
 
@@ -99,7 +106,19 @@ Wyzwanie implementacyjne:
 Standardowy trening modelu o 4.5 miliarda parametrów wymagał optymalizacji pamięciowej oraz obsługi długich tekstów (artykuły z datasetu MIPD często przekraczają standardowe okna kontekstowe).
 
 Zastosowane rozwiązanie:
-Zastosowano technikę QLoRA (Dettmers et al., 2023) z wykorzystaniem biblioteki Unsloth. Pozwoliło to na zamrożenie głównych wag modelu (zapisanych w formacie 4-bitowym NF4) i trenowanie jedynie niewielkich macierzy adapterów (Hu et al., 2021).
+Zastosowano technikę QLoRA (Dettmers et al., 2023) z wykorzystaniem biblioteki Unsloth. Pozwoliło to na zamrożenie głównych wag modelu (zapisanych w formacie 4-bitowym NF4) i trenowanie jedynie niewielkich macierzy adapterów (Hu et al., 2021). Proces konfiguracji warstwy adaptacyjnej (LoRA) przedstawia poniższy fragment kodu (plik `trainer.py`):
+
+```python
+model = FastLanguageModel.get_peft_model(
+    model,
+    r = 16, # Ranga macierzy LoRA
+    target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    lora_alpha = 16,
+    lora_dropout = 0,
+    bias = "none",
+    use_gradient_checkpointing = "unsloth",
+)
+```
 
 W celu obsługi długich tekstów zaimplementowano strategię Long Context z wykorzystaniem RoPE Scaling (Liu et al., 2023). W konfiguracji trenera ustawiono parametr max_seq_length = 16384, co w połączeniu z gradient_checkpointing umożliwiło trening na dostępnych zasobach (w Colabie). Dodatkowo, zastosowano technikę "Completion Only LM" (maskowanie promptu użytkownika w funkcji straty), co zmusiło model do uczenia się wyłącznie generowania analizy, a nie reprodukcji długiego tekstu wejściowego, znacząco przyspieszając konwergencję. Model prototypowy osiągnął wynik F1 na poziomie 0.7824 na zbiorze testowym, dowodząc technicznej wykonalności przyjętej koncepcji.
 ### 2.4. Architektura inferencji i konwersja modelu
@@ -127,9 +146,25 @@ System ewaluacji jest w pełni zautomatyzowany i zintegrowany z backendem – po
 
 Istotą projektu jako pracy inżynierskiej jest transformacja statycznego modelu w adaptujący się system. Zaprojektowano architekturę MLOps typu "Human-in-the-Loop", składającą się z:
 
-1. Backendu Orkiestracyjnego: Serwisu w Pythonie, który monitoruje przyrost danych i zarządza procesami w tle.
-2. Automatyzacji Treningu (Trigger & Retraining): Mechanizmu, który po zebraniu odpowiedniej liczby nowych próbek automatycznie uruchamia proces douczania, wykorzystując techniki zapobiegające "katastrofalnemu zapominaniu" (Replay Buffer).
-3. Automatycznego Wdrożenia (Hot-Swap): Logiki decyzyjnej, która na podstawie wyników benchmarku automatycznie podmienia model na produkcji (bez przerywania dostępności usługi), tylko jeśli nowa wersja osiąga lepsze wyniki F1.
+1. Backendu Orkiestracyjnego: Serwisu w Pythonie, który monitoruje przyrost danych i zarządza procesami w tle. Wykorzystuje on środowisko WSL (Windows Subsystem for Linux) jako warstwę izolacji obliczeniowej (`orchestrator.py`):
+```python
+# Inicjalizacja treningu w wyizolowanym kontenerze WSL
+cmd = f"wsl --exec python3 -u -m app.training.trainer --data {wsl_path} --output ./model/latest --base {base_model_wsl}"
+process = subprocess.Popen(cmd, shell=True, stdout=f_log, stderr=subprocess.STDOUT)
+```
+2. Automatyzacji Treningu (Trigger & Retraining): Mechanizmu, który po zebraniu kompletnego zestawu ewaluacyjnego uruchamia proces douczania.
+3. Decyzji o Wdrożeniu: Logiki, która po zakończeniu automatycznego benchmarku zwraca wyniki do eksperta, zapalając odpowiednie wskaźniki w interfejsie graficznym. Interfejs podświetla na zielono lub czerwono kluczowe metryki, ułatwiając podjęcie decyzji. Ekspert zachowuje jednak pełną kontrolę – może zatwierdzić wdrożenie (Hot-Swap) modelu na produkcję poprzez kliknięcie przycisku "Wdroż", nawet jeśli wyniki numeryczne uległy pogorszeniu, jeśli np. uzna, że nowa wersja lepiej radzi sobie z najcięższymi przypadkami brzegowymi.
+
+Algorytm procesu iteracyjnego douczania (Retraining Loop):
+
+1. Odbierz nowy, kompletny zbiór danych treningowych przesłany przez eksperta przez interfejs.
+2. Inicjuj proces treningowy (adapter LoRA) we wskazanym środowisku wykonawczym (WSL).
+3. Po zakończeniu, uruchom automatyczną ewaluację modelu (Benchmark) na wydzielonym zbiorze testowym.
+4. Pobierz wyniki ewaluacji (F1 Score, Exact Match).
+5. Wyświetl wyniki w panelu wraz z kolorystyczną sugestią wdrożenia (czerwony/zielony).
+6. Oczekuj na manualną akceptację przez eksperta (przycisk "Wdroż" staje się aktywny).
+7. W przypadku zatwierdzenia, skompiluj adapter do formatu GGUF (z wykorzystaniem narzędzi llama.cpp; Gerganov, 2023) i podmień aktualny model produkcyjny w serwerze Ollama.
+
 
 ### 2.7. Ograniczenia projektu
 
@@ -145,6 +180,8 @@ Halucynacje nazw kluczy JSON: Mimo programowego wymuszania struktury JSON w zbio
 Halucynacje nazw tagów (wartości): Obserwowano również przypadki generowania błędnych nazw etykiet, będących literówkami nazw poprawnych (np. "EMOTIORAL_CONTENT" zamiast "EMOTIONAL_CONTENT" lub "MISLEADING_CLICKBAI"). Wskazuje to na problem "rozmycia" rzadkich tokenów w procesie kwantyzacji lub niedostateczną liczbę powtórzeń poprawnych etykiet w zbiorze treningowym względem etykiet pustych. Obecny system ewaluacji traktuje takie tagi jako błędne (False Negative dla poprawnej klasy), ale nie klasyfikuje ich jako błędu strukturalnego.
 
 ### 2.8. Analiza wydajności i wyniki eksperymentalne
+
+Złożoność obliczeniowa i parametry czasowe systemu (czas treningu i inferencji) są ściśle uzależnione od wykorzystanej infrastruktury sprzętowej oraz rozmiaru przetwarzanego zbioru. Należy rozróżnić dwa scenariusze użycia. Po pierwsze, ze względu na zapotrzebowanie na zasoby, pełne cykle dostrajania (SFT) i wyczerpująca ewaluacja głównych wariantów modelu (Tabela 1) zostały przeprowadzone w środowisku Google Colab (T4 GPU) na pełnym zbiorze danych. Po drugie, w przypadku lokalnego modułu iteracyjnego douczania (Retraining Loop), działającego na stacji roboczej z użyciem zredukowanego zbioru zgłoszeń dezinformacyjnych, szacunkowy czas jednego cyklu douczania (16 kroków) wynosi około 2 minuty. Czas lokalnej inferencji (generowania analizy w czasie rzeczywistym) dla pojedynczego zgłoszenia wynosi od 2 do 5 sekund na konsumenckiej karcie graficznej.
 
 Przeprowadzono analizę porównawczą trzech wariantów modelu:
 1. No Adapter: Model bazowy (Bielik-4.5B-Instruct) bez dostrajania.
@@ -163,6 +200,7 @@ Przeprowadzono analizę porównawczą trzech wariantów modelu:
 Analiza wyników:
 * Wpływ dostrajania: Model bazowy ("No Adapter") wykazuje krytycznie niską zdolność do formowania poprawnego wyjścia JSON (PSR 20%), co dyskwalifikuje go z zastosowań produkcyjnych. Dostrajanie (Adaptery) podnosi stabilność formatu do poziomu >96%.
 * Wpływ jakości generowanych wyjaśnień (XAI): Teoretycznie integracja warstwy wyjaśnialności powinna wspierać precyzję klasyfikacji poprzez wymuszenie głębszej analizy tekstu. Obserwowany spadek skuteczności wariantu "XAI" (F1 0.28 vs 0.49) wskazuje jednak na wpływ jakości danych trenujących w zakresie wyjaśnień (NLE). Jak wskazano w sekcji ograniczeń ("Brak formalnej walidacji jakości wyjaśnień"), model "Nauczyciela" mógł generować halucynacje lub błędne uzasadnienia, które model "Ucznia" następnie powielił, co paradoksalnie zaburzyło proces decyzyjny zamiast go wspomóc. Potwierdza to kluczową rolę weryfikacji jakości danych w procesie destylacji wiedzy.
+* Odniesienie do literatury (External Baseline): Uzyskane wyniki dla wariantu Prototype Adapter (F1 = 0.49) przewyższają bazowe wyniki raportowane w literaturze dla zbioru MIPD (Modzelewski et al., 2024), gdzie modele PL-RoBERTa-Large osiągały ważone F1 na poziomie ok. 0.47 (±0.003). Potwierdza to wysoką skuteczność procesu dostrajania modelu Bielik-4.5B w zadaniu czystej klasyfikacji. Warto jednak zauważyć, że wariant XAI Adapter, wprowadzający warstwę wyjaśnialności, uzyskuje obecnie wyniki niższe od literatury (F1 = 0.28). Wskazuje to na istotne wyzwanie inżynierskie: wprowadzenie wyjaśnialności (NLE) wiąże się obecnie z tzw. podatkiem od wydajności (performance tax). Optymalizacja jakości danych syntetycznych oraz procesu destylacji wiedzy, mająca na celu zbliżenie skuteczności wariantu XAI do poziomu Prototype, stanowi jeden z głównych kierunków dalszych prac.
 
 Analiza Macierzy Pomyłek:
 Analiza macierzy pomyłek (zawartych w Sekcji 3) potwierdza te obserwacje:
@@ -233,5 +271,6 @@ Choć niniejszy dokument nie jest pracą dyplomową w tradycyjnym tego słowa ro
 8.  Modzelewski, A., Da San Martino, G., Savov, P., Wilczyńska, M. A., & Wierzbicki, A. (2024). *MIPD: Exploring Manipulation and Intention In a Novel Corpus of Polish Disinformation*. Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing.
 9.  SpeakLeash Team (Ociepa, K. et al.). (2024). *Bielik-4.5B-v3: Polish Large Language Model*. Technical Report. https://huggingface.co/speakleash/Bielik-4.5B-v3
 10. Yang, A., Yang, B., Zhang, B., et al. (2024). *Qwen2.5 Technical Report*. arXiv preprint arXiv:2412.15115. https://doi.org/10.48550/arXiv.2412.15115
+11. Gerganov, G. (2023). *llama.cpp: Inference of LLaMA model in pure C/C++*. GitHub. https://github.com/ggerganov/llama.cpp
 
 

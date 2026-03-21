@@ -1,0 +1,34 @@
+SPRAWOZDANIE Z WPROWADZONYCH POPRAWEK W DOKUMENTACJI PROJEKTU
+Temat: System detekcji dezinformacji i błędów logicznych z wykorzystaniem XAI.
+
+Poniżej przedstawiam zestawienie kluczowych zmian i uzupełnień wprowadzonych w dokumencie thesis-sections.md, mających na celu uszczegółowienie warstwy merytorycznej oraz technicznej projektu:
+
+1. ROZBUDOWA LITERATURY PRZEDMIOTU (Sekcja 2.2):
+   - Wprowadzono odniesienia do fundamentalnych prac z zakresu wyjaśnialnej sztucznej inteligencji (XAI) w NLP: Camburu et al. (2018) oraz Lei et al. (2016).
+   - Skonkretyzowano pojęcie Natural Language Explanations (NLE) oraz mechanizmu Rationalization, na których bazuje moduł wyjaśniający systemu.
+
+2. FORMALIZACJA STRUKTURY DANYCH (Sekcja 2.2):
+   - Dodano precyzyjny schemat JSON generowany przez model (XAI Adapter).
+   - Zdefiniowano strukturę pola "discovered_techniques" jako listę tagów oraz pole "reasoning" zawierające uzasadnienie logiczne.
+
+3. DETALE IMPLEMENTACYJNE ORAZ KONFIGURACYJNE (Sekcja 2.3 i 2.6):
+   - Wstawiono fragmenty kodu źródłowego (plik trainer.py) obrazujące konfigurację adapterów LoRA (parametry r=16, alpha=16).
+   - Dodano fragment kodu orkiestratora (orchestrator.py) odpowiedzialny za izolację procesów treningowych w środowisku WSL (Windows Subsystem for Linux).
+
+4. ALGORYTM PĘTLI DOUCZANIA (Sekcja 2.6 - Linie 158-166):
+   - Sformalizowano proces Human-in-the-Loop w postaci 7-stopniowego algorytmu Retraining Loop.
+   - Opisano ścieżkę od odbioru danych treningowych, przez trening adaptera w WSL i automatyczny benchmarking, aż po manualną decyzję eksperta o wdrożeniu modelu do produkcji (Hot-Swap w serwerze Ollama).
+
+5. ANALIZA PORÓWNAWCZA Z LITERATURĄ (Sekcja 2.8 - Linia 203):
+   - Dodano krytyczne odniesienie do baseline'u zewnętrznego (MIPD paper, EMNLP 2024).
+   - Porównano wynik wariantu Prototype Adapter (F1=0.49) z wynikami modelu PL-RoBERTa-Large (F1=0.47), wykazując wyższą skuteczność zastosowanego podejścia.
+   - Wprowadzono pojęcie "podatku od wydajności" (performance tax) w kontekście wariantu XAI (F1=0.28), wskazując na złożoność łączenia klasyfikacji z generowaniem wyjaśnień jako kierunek dalszych badań.
+
+6. PARAMETRY WYDAJNOŚCIOWE (Sekcja 2.8):
+   - Uzupełniono dane o rzeczywiste czasy operacyjne. Rozdzielono czas treningu i ewaluacji (przeprowadzone w Google Colab na pełnym zbiorze danych) od czasu lokalnej inferencji (2-5s) i szybkiego dotrenowania na stacji roboczej (ok. 2 min) przy użyciu konsumenckich kart graficznych.
+
+Wszystkie poprawki zostały naniesione w celu zwiększenia transparentności metodologii oraz lepszego udokumentowania inżynierskiego charakteru prac.
+
+7. INFRASTRUKTURA INFERENCYJNA (Sekcja 1.3 i Bibliografia):
+   - Uwzględniono technologię llama.cpp jako kluczowy element procesu konwersji adapterów do formatu GGUF oraz silnik napędzający lokalną inferencję w serwerze Ollama.
+
