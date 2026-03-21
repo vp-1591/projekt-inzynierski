@@ -7,9 +7,10 @@ from sqlalchemy.orm import Session
 from ..db import database
 
 class MLOpsOrchestrator:
+    """Orchestrates the training, evaluation, and deployment lifecycle of LLM adapters."""
     def __init__(self, db: Session):
         self.db = db
-        # Runtime state (in-memory for simplicity, use Redis for prod)
+        # Pipeline State
         self.training_progress = 0
         self.evaluation_progress = 0
         self.baseline_f1_non_empty = 0.0
@@ -20,6 +21,7 @@ class MLOpsOrchestrator:
         self.latest_adapter_path = None
 
     def get_status(self):
+        """Aggregates and returns the full pipeline status and metrics."""
         baseline = self.read_baseline_metrics()
         return {
             "status": self.status,
@@ -32,30 +34,27 @@ class MLOpsOrchestrator:
         }
 
     def read_baseline_metrics(self):
+        """Parses the current baseline report to extract F1 and Exact-Match scores."""
         result = {'f1': 0.0, 'em': 0.0}
         try:
-            # Point to the xai-adapter report by default as requested
             report_path = r"c:\Users\vadim\Documents\Vadym\GitRep\projekt-inzynierski\model\benchmark-reports\current_baseline_report.txt"
             with open(report_path, "r", encoding="utf-8") as f:
                 content = f.read()
                 
-                # Parse "Exact-Match Accuracy: 0.7318 (1113/1521)"
                 import re
                 match_em = re.search(r"Exact-Match Accuracy: (\d+\.\d+)", content)
                 if match_em:
                     result['em'] = float(match_em.group(1))
                     
-                # Parse "Mean Document-Level F1 (excluding empty gold-label docs): 0.2847"
                 match_f1 = re.search(r"Mean Document-Level F1 \(excluding empty gold-label docs\): (\d+\.\d+)", content)
                 if match_f1:
                     result['f1'] = float(match_f1.group(1))
-                    
-                
             return result
         except:
             return result
 
     def start_manual_training(self, file_path: str):
+        """Initiates the training process inside WSL and tracks progress."""
         if self.status not in ["idle", "deployment_success", "deployment_error", "ready_to_promote"]:
             return False
             
@@ -63,7 +62,7 @@ class MLOpsOrchestrator:
         self.training_progress = 0
         self.evaluation_progress = 0
         
-        # 1. Record the run
+        # Persist run metadata
         new_run = database.TrainingRun(
             status="running",
             start_time=datetime.utcnow()
@@ -71,31 +70,28 @@ class MLOpsOrchestrator:
         self.db.add(new_run)
         self.db.commit()
 
-        # 2. Trigger WSL (Linux) training
+        # Resolve paths & environment
         wsl_path = file_path.replace("\\", "/").replace("c:", "/mnt/c").replace("C:", "/mnt/c")
         
-        # Logging setup
         log_dir = "logs"
         os.makedirs(log_dir, exist_ok=True)
         log_file = os.path.join(log_dir, f"training_{new_run.id}.log")
         
-        # Define model path in WSL format (Resolving Project Root)
         current_dir = os.getcwd()
         if os.path.basename(current_dir) == "backend":
             project_root = os.path.dirname(current_dir)
         else:
             project_root = current_dir
             
-        base_model_windows = os.path.join(project_root, "model", "bielik-4.5b-base")
-        base_model_wsl = base_model_windows.replace("\\", "/").replace("c:", "/mnt/c").replace("C:", "/mnt/c")
+        base_model_win = os.path.join(project_root, "model", "bielik-4.5b-base")
+        base_model_wsl = base_model_win.replace("\\", "/").replace("c:", "/mnt/c").replace("C:", "/mnt/c")
 
-        # Dynamically get Host IP for WSL to call back
+        # Get Host IP for WSL-to-Windows callbacks
         import socket
         try:
-            # This usually gets the LAN IP (e.g. 192.168.x.x) which is reachable from WSL
             host_ip = socket.gethostbyname(socket.gethostname())
         except:
-            host_ip = "127.0.0.1" # Fallback
+            host_ip = "127.0.0.1"
 
         cmd = f"wsl --exec python3 -u -m app.training.trainer --data {wsl_path} --output ./model/latest --base {base_model_wsl} --backend http://{host_ip}:8000"
         
@@ -104,7 +100,6 @@ class MLOpsOrchestrator:
                 f_log.write(f"--- Training started at {datetime.utcnow()} ---\n")
                 f_log.write(f"COMMAND: {cmd}\n\n")
             
-            # Open log in append mode for the subprocess
             f_log = open(log_file, "a")
             process = subprocess.Popen(
                 cmd, 
@@ -113,66 +108,52 @@ class MLOpsOrchestrator:
                 stderr=subprocess.STDOUT,
                 universal_newlines=True
             )
-            print(f"DEBUG: Training process started with PID {process.pid}. Logs: {log_file}")
+            print(f"Training started (PID: {process.pid}). Logs: {log_file}")
             return True
         except Exception as e:
-            print(f"ERROR: Failed to start training: {str(e)}")
+            print(f"Training launch failed: {str(e)}")
             self.status = "idle"
             new_run.status = "failed"
             self.db.commit()
             return False
 
     def update_progress(self, stage: str, value: int):
+        """External progress update hook."""
         if stage == "training":
             self.training_progress = value
         elif stage == "evaluation":
             self.evaluation_progress = value
 
     def finish_training_and_evaluate(self, adapter_path: str):
+        """Transitions the pipeline from training to benchmark evaluation."""
         self.status = "evaluating"
         self.training_progress = 100
         self.evaluation_progress = 0
         self.latest_adapter_path = adapter_path
         
-        # Real implementation: run benchmark script via WSL
         import threading
         
         def run_benchmark():
+            """Worker thread for running the evaluation benchmark in WSL."""
             try:
-                # 1. Resolve paths
                 current_dir = os.getcwd()
-                if os.path.basename(current_dir) == "backend":
-                    project_root = os.path.dirname(current_dir)
-                else:
-                    project_root = current_dir
-                    
-                # WSL Path Converter
+                project_root = os.path.dirname(current_dir) if os.path.basename(current_dir) == "backend" else current_dir
+                
                 def to_wsl(path):
                     return path.replace("\\", "/").replace("c:", "/mnt/c").replace("C:", "/mnt/c")
                 
-                # Handle adapter path (could be Windows path OR WSL path from trainer)
+                # Handle adapter path conversion
                 if adapter_path.startswith("/mnt/"):
                     adapter_wsl = adapter_path
                 else:
-                    # Assume relative or absolute Windows path
-                    if not os.path.isabs(adapter_path):
-                         adapter_full_win = os.path.join(project_root, adapter_path)
-                    else:
-                        adapter_full_win = adapter_path
-                    
-                    # Normalize and convert
-                    adapter_full_win = os.path.normpath(os.path.abspath(adapter_full_win))
+                    adapter_full_win = os.path.normpath(os.path.abspath(os.path.join(project_root, adapter_path) if not os.path.isabs(adapter_path) else adapter_path))
                     adapter_wsl = to_wsl(adapter_full_win)
 
-                base_dir_win = os.path.join(project_root, "model", "bielik-4.5b-base")
-                dataset_win = os.path.join(project_root, "model", "dataset", "mipd_test.jsonl")
-                output_dir_win = os.path.join(project_root, "model", "benchmark-reports")
+                # Prepare WSL command parameters
+                base_wsl = to_wsl(os.path.join(project_root, "model", "bielik-4.5b-base"))
+                data_wsl = to_wsl(os.path.join(project_root, "model", "dataset", "mipd_test.jsonl"))
+                output_wsl = to_wsl(os.path.join(project_root, "model", "benchmark-reports"))
                 
-                base_wsl = to_wsl(base_dir_win)
-                data_wsl = to_wsl(dataset_win)
-                output_wsl = to_wsl(output_dir_win)
-                
-                # Backend IP
                 import socket
                 try:
                     host_ip = socket.gethostbyname(socket.gethostname())
@@ -181,12 +162,9 @@ class MLOpsOrchestrator:
                     
                 cmd = f"wsl --exec python3 -u -m app.training.benchmark --adapter {adapter_wsl} --base {base_wsl} --data {data_wsl} --backend http://{host_ip}:8000 --output_dir {output_wsl} --no-tqdm"
                 
-                print(f"DEBUG: Starting benchmark with command: {cmd}")
-                
-                # Setup benchmark logging
-                log_dir = "logs"
-                os.makedirs(log_dir, exist_ok=True)
-                bench_log_file = os.path.join(log_dir, f"benchmark_{int(datetime.utcnow().timestamp())}.log")
+                # Internal logging
+                os.makedirs("logs", exist_ok=True)
+                bench_log_file = os.path.join("logs", f"benchmark_{int(datetime.utcnow().timestamp())}.log")
                 
                 with open(bench_log_file, "w") as f:
                     f.write(f"--- Benchmark started at {datetime.utcnow()} ---\n")
@@ -200,8 +178,8 @@ class MLOpsOrchestrator:
                     universal_newlines=True
                 )
                 
-                # Stream output to capture F1 and log to file
                 captured_f1 = 0.0
+                captured_em = 0.0
                 
                 with open(bench_log_file, "a") as f_bench:
                     while True:
@@ -209,254 +187,145 @@ class MLOpsOrchestrator:
                         if not line and process.poll() is not None:
                             break
                         if line:
-                            # Log to file
                             f_bench.write(line)
                             f_bench.flush()
                             
+                            # Parse metrics from live output
                             if "FINAL_F1_SCORE:" in line:
-                                try:
-                                    captured_f1 = float(line.split(":")[1].strip())
-                                    print(f"DEBUG: Benchmark captured F1: {captured_f1}")
-                                except:
-                                    pass
+                                try: captured_f1 = float(line.split(":")[1].strip())
+                                except: pass
                             
                             if "FINAL_EXACT_MATCH:" in line:
                                 try:
                                     captured_em = float(line.split(":")[1].strip())
-                                    print(f"DEBUG: Benchmark captured Exact Match: {captured_em}")
                                     self.new_exact_match = captured_em
-                                except:
-                                    pass
+                                except: pass
                             
                 process.wait()
                 
                 if process.returncode == 0:
                     self.new_f1_non_empty = captured_f1
-                    # Since we don't stream ExactMatch perfectly here yet, we assume the report generation 
-                    # was successful and we can parse it for frontend display if we wanted to be super precise,
-                    # but for now let's just mark it ready. The frontend might need to know the report path 
-                    # to parse specific new metrics? Or we should store them in self variables.
-                    # For simplicity, let's keep it as is.
                     self.status = "ready_to_promote"
-                    print(f"DEBUG: Evaluation done. New F1 (Strict): {self.new_f1_non_empty}")
                 else:
-                    print(f"ERROR: Benchmark failed with return code {process.returncode}")
-                    self.status = "idle" # Reset to idle on failure
+                    self.status = "idle"
             except Exception as e:
-                print(f"ERROR: Benchmark thread failed: {e}")
+                print(f"Benchmark error: {e}")
                 self.status = "idle"
 
         threading.Thread(target=run_benchmark).start()
 
-
     async def deploy_new_adapter(self, adapter_path: str):
-        """
-        Implementation of 2.5.4: Hot-Swap Logic
-        """
-        # Setup logging
-        log_dir = "logs"
-        os.makedirs(log_dir, exist_ok=True)
-        deploy_log_file = os.path.join(log_dir, f"deploy_{int(datetime.utcnow().timestamp())}.log")
+        """Converts the HF adapter to GGUF and hot-swaps the production Ollama model."""
+        os.makedirs("logs", exist_ok=True)
+        deploy_log_file = os.path.join("logs", f"deploy_{int(datetime.utcnow().timestamp())}.log")
         
         with open(deploy_log_file, "w", encoding="utf-8") as f:
             f.write(f"--- Deployment started at {datetime.utcnow()} ---\n")
             f.write(f"Adapter: {adapter_path}\n")
 
         def log_deploy(msg):
-            # print(f"DEPLOY: {msg}") # Silenced per user request
             with open(deploy_log_file, "a", encoding="utf-8") as f:
                 f.write(f"{msg}\n")
 
-        # 0. CONVERSION STEP
+        # --- Phase 1: GGUF Conversion ---
         self.status = "deploying" 
-        log_deploy(f"Starting GGUF conversion for {adapter_path}")
+        log_deploy(f"Converting adapter: {adapter_path}")
         
-        
-        # 1. Read HF_TOKEN from .env
         from dotenv import load_dotenv
-        # Assuming we are in backend/ directory, .env is in root (../.env)
         env_path = os.path.join(os.path.dirname(os.getcwd()), ".env")
         if not os.path.exists(env_path):
-             # Try logical parent if dirname(getcwd) isn't what we expect (e.g. if we are in root/backend)
              env_path = os.path.join(os.getcwd(), "..", ".env")
         
         load_dotenv(env_path)
         hf_token = os.getenv("HF_TOKEN", "")
         
-        # 2. Construct command with env var and base-model-id
-        # We run inside WSL because the heavy ML dependencies (Torch, Transformers) are installed there.
-        # We are utilizing the vendored llama.cpp script via the converter wrapper.
-        
-        
         env_prefix = f"HF_TOKEN={hf_token} " if hf_token else ""
-        
-        # We wrap in bash -c to ensure the environment variable syntax (VAR=VAL cmd) works
-        # And updated model ID
         inner_cmd = f"{env_prefix}python3 -u -m app.training.converter --adapter {adapter_path} --base-model-id speakleash/Bielik-4.5B-v3.0-Instruct --output {adapter_path}_gguf --quant_method q4_k_m"
-        
         conversion_cmd = f'wsl --exec bash -c "{inner_cmd}"'
         
-        log_deploy(f"Command: {conversion_cmd}")
-
         try:
             import asyncio
-            # Use asyncio to prevent blocking the event loop
             process = await asyncio.create_subprocess_shell(
                 conversion_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT
             )
 
-            # Stream output
             with open(deploy_log_file, "a", encoding="utf-8") as f_log:
                 while True:
                     line = await process.stdout.readline()
-                    if not line:
-                        break
-                    decoded_line = line.decode().strip()
-                    # print(f"CONVERT: {decoded_line}") # Silenced
-                    f_log.write(f"{decoded_line}\n")
+                    if not line: break
+                    f_log.write(f"{line.decode().strip()}\n")
                     f_log.flush()
 
             await process.wait()
-            
             if process.returncode != 0:
-                 log_deploy(f"ERROR: Conversion failed with code {process.returncode}")
+                 log_deploy(f"Conversion failed (code {process.returncode})")
                  self.status = "ready_to_promote" 
                  return False
-            
             log_deploy("Conversion successful.")
-                 
         except Exception as e:
-            log_deploy(f"ERROR: Failed to run conversion: {e}")
+            log_deploy(f"Conversion runtime error: {e}")
             self.status = "ready_to_promote"
             return False
 
-        # 1. Infer GGUF path from HF adapter path
-        # adapter_path comes as WSL path (e.g. /mnt/c/Users/.../model/latest/adapter)
-        # We need to find .../adapter_gguf/....gguf
-        
-        # Helper to convert WSL path back to Windows for Ollama (running on Windows)
+        # --- Phase 2: Hot-Swap ---
         def wsl_to_win(path):
-            if path.startswith("/mnt/c/"):
-                return path.replace("/mnt/c/", "c:/")
-            elif path.startswith("/mnt/d/"):
-                return path.replace("/mnt/d/", "d:/")
+            if path.startswith("/mnt/c/"): return path.replace("/mnt/c/", "c:/")
+            if path.startswith("/mnt/d/"): return path.replace("/mnt/d/", "d:/")
             return path
             
-        hf_wsl_path = adapter_path.rstrip("/")
-        gguf_wsl_dir = hf_wsl_path + "_gguf"
-        
-        # We need to find the actual .gguf file inside that directory
-        # Since the backend is running on Windows, we can access these files via Windows paths
-        gguf_win_dir = wsl_to_win(gguf_wsl_dir)
-        
-        print(f"DEBUG: Looking for GGUF in {gguf_win_dir}")
+        gguf_win_dir = wsl_to_win(adapter_path.rstrip("/") + "_gguf")
         
         found_gguf_path = None
         try:
-            # Retry loop in case filesystem lag (not usually needed for synchronous process wait, but good safety)
             for file in os.listdir(gguf_win_dir):
                 if file.endswith(".gguf"):
-                    found_gguf_path = os.path.join(gguf_win_dir, file)
+                    found_gguf_path = os.path.join(gguf_win_dir, file).replace("\\", "/")
                     break
         except Exception as e:
-            print(f"ERROR: Could not list GGUF directory: {e}")
+            print(f"GGUF directory access error: {e}")
             self.status = "ready_to_promote"
             return False
             
         if not found_gguf_path:
-            print("ERROR: No .gguf file found in adapter directory")
             self.status = "ready_to_promote"
             return False
-            
-        # Normalize slashes for Modelfile
-        found_gguf_path = found_gguf_path.replace("\\", "/")
-        print(f"DEBUG: Found GGUF adapter: {found_gguf_path}")
 
-        # 2. Update the local Modelfile content
+        # Update Modelfile
         modelfile_path = "c:/Users/vadim/Documents/Vadym/GitRep/projekt-inzynierski/model/Modelfile"
-        
-        with open(modelfile_path, "r") as f:
-            lines = f.readlines()
-        
-        # Replace the ADAPTER line
+        with open(modelfile_path, "r") as f: lines = f.readlines()
         with open(modelfile_path, "w") as f:
             for line in lines:
-                if line.startswith("ADAPTER"):
-                    f.write(f"ADAPTER {found_gguf_path}\n")
-                else:
-                    f.write(line)
+                f.write(f"ADAPTER {found_gguf_path}\n" if line.startswith("ADAPTER") else line)
         
-        # 3. Tell Ollama to recreate the model with new config
-        async with httpx.AsyncClient() as client:
-            try:
-                # Set status to deploying
-                self.status = "deploying"
-                
-                # Read Modelfile content (just for debug logging if needed, or skip)
-                # We use the CLI now, so we just need the path.
-                
-                print(f"DEBUG: Executing 'ollama create' CLI for {modelfile_path}")
-                
-                # Use subprocess to call 'ollama create'
-                # This handles all the blob hashing and upload complexities automatically
-                create_cmd = ["ollama", "create", "bielik-lora-mipd", "-f", modelfile_path]
-                
-                # Check formatting/encoding of path for subprocess? 
-                # Subprocess handles arguments well.
-                
-                process = subprocess.run(
-                    create_cmd,
-                    capture_output=True,
-                    text=True,
-                    encoding='utf-8',
-                    check=False # We handle return code manually
-                )
-                
-                if process.returncode != 0:
-                     print(f"ERROR: Ollama create failed with code {process.returncode}")
-                     print(f"ERROR STDOUT: {process.stdout}")
-                     print(f"ERROR STDERR: {process.stderr}")
-                     raise Exception(f"Ollama CLI failed: {process.stderr}")
-                
-                print("DEBUG: Ollama model hot-swapped successfully (CLI).")
-                print(f"DEBUG CLI OUTPUT: {process.stdout}")
-                
-                # Set status back to idle upon success
-                # Set status back to idle upon success
-                self.status = "deployment_success"
+        # Reload Ollama using CLI
+        try:
+            self.status = "deploying"
+            create_cmd = ["ollama", "create", "bielik-lora-mipd", "-f", modelfile_path]
+            process = subprocess.run(create_cmd, capture_output=True, text=True, encoding='utf-8')
             
-            except Exception as e:
-                print(f"ERROR: Hot-swap exception: {e}")
-                self.status = "deployment_error"
-                return False
+            if process.returncode != 0:
+                raise Exception(f"Ollama create failed: {process.stderr}")
             
-            # 4. SWAP REPORTS: Set the new model's report as the baseline
-            # We need to find the report file generated by the latest benchmark
-            # It is located in model/benchmark-reports/benchmark_report_{TIMESTAMP}.txt
-            # We simply find the most recent one.
+            self.status = "deployment_success"
+        except Exception as e:
+            print(f"Ollama hot-swap failed: {e}")
+            self.status = "deployment_error"
+            return False
+            
+        # Update baseline report metadata
+        try:
             project_root = r"c:/Users/vadim/Documents/Vadym/GitRep/projekt-inzynierski"
             reports_dir = os.path.join(project_root, "model", "benchmark-reports")
             baseline_report_path = os.path.join(reports_dir, "current_baseline_report.txt")
             
-            # List files matching benchmark_report_*.txt
-            candidates = []
-            if os.path.exists(reports_dir):
-                for f in os.listdir(reports_dir):
-                    if f.startswith("benchmark_report_") and f.endswith(".txt"):
-                            candidates.append(os.path.join(reports_dir, f))
-            
+            candidates = [os.path.join(reports_dir, f) for f in os.listdir(reports_dir) if f.startswith("benchmark_report_") and f.endswith(".txt")]
             if candidates:
-                # Sort by modification time (latest first)
-                candidates.sort(key=os.path.getmtime, reverse=True)
-                latest_report = candidates[0]
-                
-                try:
-                    import shutil
-                    shutil.copy2(latest_report, baseline_report_path)
-                    print(f"DEBUG: Baseline report updated from {latest_report}")
-                except Exception as e:
-                    print(f"ERROR: Failed to update baseline report: {e}")
+                latest_report = sorted(candidates, key=os.path.getmtime, reverse=True)[0]
+                import shutil
+                shutil.copy2(latest_report, baseline_report_path)
+        except Exception as e:
+            print(f"Failed to update baseline metadata: {e}")
             
-            return True
+        return True

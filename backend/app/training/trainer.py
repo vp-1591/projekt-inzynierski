@@ -9,6 +9,7 @@ import requests
 from transformers import TrainerCallback
 
 class ProgressCallback(TrainerCallback):
+    """Callback to report training progress back to the backend API."""
     def __init__(self, backend_url):
         self.backend_url = backend_url
 
@@ -16,14 +17,14 @@ class ProgressCallback(TrainerCallback):
         if state.max_steps > 0:
             progress = int((state.global_step / state.max_steps) * 100)
             try:
-                # print(f"DEBUG: Reporting progress {progress}% to {self.backend_url}", file=sys.stderr, flush=True)
                 requests.post(f"{self.backend_url}/training/progress", 
                               json={"stage": "training", "value": progress},
                               timeout=1)
             except Exception as e:
-                print(f"Failed to report progress to {self.backend_url}: {e}", file=sys.stderr, flush=True)
+                print(f"Failed to report progress: {e}", file=sys.stderr, flush=True)
 
 class ModelTrainer:
+    """Handles the Finetuning (SFT) process using Unsloth and QLoRA."""
     def __init__(self, base_model="unsloth/bielik-7b-v1.1-bnb-4bit", output_dir="./model/latest"):
         self.base_model = base_model
         self.output_dir = output_dir
@@ -31,25 +32,27 @@ class ModelTrainer:
 
     def run_sft(self, dataset_path, max_steps=60, backend_url="http://localhost:8000"):
         """
-        Implementation of 2.2: SFT with QLoRA & Long Context
-        NOTE: This requires a Linux environment (or WSL2) and a compatible GPU.
+        Executes Supervised Fine-Tuning (SFT). 
+        Optimized for 4-bit quantization and gradient checkpointing to save VRAM.
         """
         if os.name == 'nt':
             print("WARNING: Unsloth is optimized for Linux. Running on Windows may fail.")
 
         import sys
         import subprocess
-        # DEBUG: Print REAL system VRAM via nvidia-smi
+
+        # Check GPU memory status
         try:
             cmd = "nvidia-smi --query-gpu=memory.total,memory.used,memory.free --format=csv,noheader"
             output = subprocess.check_output(cmd, shell=True).decode().strip()
             total, used, free = output.split(',')
-            print(f"DEBUG [nvidia-smi]: Total: {total}, Used: {used}, Free: {free}", file=sys.stderr, flush=True)
+            print(f"GPU Status: Total: {total}, Used: {used}, Free: {free}", file=sys.stderr, flush=True)
         except Exception as e:
-            print(f"DEBUG: Could not run nvidia-smi: {e}", file=sys.stderr, flush=True)
+            print(f"nvidia-smi check failed: {e}", file=sys.stderr, flush=True)
 
-        max_seq_length = 1024 # Increased to fit 795t data, safe with Paged AdamW
+        max_seq_length = 1024 # Target sequence length for training
         
+        # Load Model & Tokenizer with 4-bit quantization
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name = self.base_model,
             max_seq_length = max_seq_length,
@@ -57,7 +60,7 @@ class ModelTrainer:
             use_gradient_checkpointing = "unsloth",
         )
 
-        # 2. Add LoRA
+        # Initialize LoRA adapters
         model = FastLanguageModel.get_peft_model(
             model,
             r = 16,
@@ -72,21 +75,16 @@ class ModelTrainer:
             loftq_config = None,
         )
 
-        # 3. Load Data
         dataset = load_dataset("json", data_files=dataset_path, split="train")
         
-        # 4. Setup Trainer
         from transformers import TrainingArguments
         
         def formatting_prompts_func(examples):
-            convos = []
+            """Prepares conversations for the chat template with truncation support."""
             texts = []
-            mapper = {"input": "user", "output": "assistant"}
             for input_text, output_text in zip(examples["input"], examples["output"]):
-                # Manual Truncation: 1024 tokens ~= 4000 chars. 
-                # We limit input article to 3500 chars to save room for output and system prompts.
-                # This prevents OOM on 16k token articles.
-                truncated_input = input_text[:3500] + "...(truncated)" if len(input_text) > 3500 else input_text
+                # Truncate input to avoid OOM on extremely long articles
+                truncated_input = input_text[:3500] if len(input_text) > 3500 else input_text
                 
                 messages = [
                     {"role": "user", "content": truncated_input},
@@ -95,6 +93,7 @@ class ModelTrainer:
                 texts.append(tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False))
             return texts
 
+        # Configure SFT Trainer
         trainer = SFTTrainer(
             model = model,
             tokenizer = tokenizer,
@@ -106,15 +105,15 @@ class ModelTrainer:
             formatting_func = formatting_prompts_func,
             args = TrainingArguments(
                 per_device_train_batch_size = 1,
-                gradient_accumulation_steps = 4, # Reduced from 8 to save interaction memory
+                gradient_accumulation_steps = 4,
                 warmup_steps = 5,
-                gradient_checkpointing = True, # CRITICAL FIX for VRAM
+                gradient_checkpointing = True,
                 num_train_epochs = 2,
                 learning_rate = 2e-4,
                 fp16 = not torch.cuda.is_bf16_supported(),
                 bf16 = torch.cuda.is_bf16_supported(),
                 logging_steps = 1,
-                optim = "paged_adamw_8bit", # CRITICAL: Offload optimizer to RAM
+                optim = "paged_adamw_8bit", # Offload optimizer states to CPU if needed
                 weight_decay = 0.01,
                 lr_scheduler_type = "linear",
                 seed = 3407,
@@ -123,18 +122,14 @@ class ModelTrainer:
             callbacks=[ProgressCallback(backend_url)]
         )
 
-        # 5. Execute Training
-        trainer_stats = trainer.train()
+        # Execute Training
+        trainer.train()
         
-        # 6. Save Adapter (HF)
+        # Save Fine-tuned adapters
         adapter_path = f"{self.output_dir}/adapter"
         model.save_pretrained(adapter_path)
         tokenizer.save_pretrained(adapter_path)
 
-        # 7. Save Adapter (GGUF) - MOVED TO DEPLOYMENT PHASE for speed
-        # GGUF conversion removed from training loop to save time during experimentation.
-
-        # Return absolute path to avoid ambiguity (HF path)
         return os.path.abspath(adapter_path)
 
 if __name__ == "__main__":
@@ -146,16 +141,15 @@ if __name__ == "__main__":
     parser.add_argument("--backend", type=str, default="http://localhost:8000", help="Backend URL")
     args = parser.parse_args()
 
-    # Note: Inside WSL, make sure path exists
     trainer_instance = ModelTrainer(base_model=args.base, output_dir=args.output)
     print(f"Starting training on {args.data}...")
     adapter_path = trainer_instance.run_sft(dataset_path=args.data, backend_url=args.backend)
     print(f"Training finished. Adapter saved to: {adapter_path}")
 
-    # Notify backend (from inside WSL to Windows Host)
+    # Notify backend of completion
     import requests
     try:
         requests.post(f"{args.backend}/training/complete?adapter_path={adapter_path}")
-        print("Backend notified of completion.")
+        print("Backend notified.")
     except Exception as e:
         print(f"Failed to notify backend: {e}")
