@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export function InputSection({ onAnalyze, isAnalyzing }) {
   const [text, setText] = useState('');
+  const { t } = useLanguage();
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -16,7 +18,7 @@ export function InputSection({ onAnalyze, isAnalyzing }) {
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Wklej artykuł do analizy..."
+          placeholder={t.placeholder}
           disabled={isAnalyzing}
           style={{
             width: '100%',
@@ -67,7 +69,7 @@ export function InputSection({ onAnalyze, isAnalyzing }) {
           if (text.trim() && !isAnalyzing) e.target.style.transform = 'translateY(0)';
         }}
       >
-        {isAnalyzing ? 'Analizowanie...' : 'Analizuj Tekst'}
+        {isAnalyzing ? t.analyzingButton : t.analyzeButton}
       </button>
     </form>
   );

@@ -1,9 +1,12 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import './index.css'
 import { InputSection } from './components/InputSection'
 import { analyzeText } from './services/disinformationDetector'
+import { useLanguage } from './contexts/LanguageContext'
 
 function App() {
+  const { language, setLanguage, t } = useLanguage();
+
   const [results, setResults] = useState(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [error, setError] = useState(null)
@@ -22,7 +25,7 @@ function App() {
     let ws = null;
     if (showExpertMode) {
       ws = new WebSocket('ws://localhost:8000/ws/training/status');
-      
+
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         setTrainingStatus(data);
@@ -55,30 +58,27 @@ function App() {
         body: formData,
       });
       if (response.ok) {
-        alert("Pomyślnie rozpoczęto trening!");
+        alert(t.uploadSuccess);
       } else {
         const errorData = await response.json();
-        alert("Błąd: " + (errorData.detail || "Nieznany błąd"));
+        alert(t.uploadError + (errorData.detail || '?'));
       }
     } catch (err) {
-      alert("Błąd połączenia: " + err.message);
+      alert(t.uploadConnError + err.message);
     }
   };
 
   const handlePromote = async () => {
     if (trainingStatus.new_f1_non_empty < trainingStatus.baseline_f1_non_empty) {
-      if (!window.confirm("Ostrzeżenie: Nowy model ma niższe F1 score niż bazowy. Czy na pewno chcesz go wdrożyć?")) {
-        return;
-      }
+      if (!window.confirm(t.promoteWarning)) return;
     }
-    
+
     try {
       const response = await fetch('http://localhost:8000/training/promote', { method: 'POST' });
-      if (response.ok) {
-        // Success feedback is handled by button state "Wdrażanie..." -> "Wdróż model" transition
-      }
+      // fetch only throws on network failure; a 4xx/5xx must be checked explicitly.
+      if (!response.ok) throw new Error(`Promotion failed: ${response.statusText}`);
     } catch (err) {
-      alert("Błąd awansu modelu: " + err.message);
+      alert(t.promoteConnError + err.message);
     }
   };
 
@@ -87,7 +87,9 @@ function App() {
     setError(null);
     try {
       const data = await analyzeText(text);
-      setResults(data);
+      // Store raw tags & reasoning. Localized mapping happens in a useMemo below,
+      // so switching language re-runs the map without discarding the user's results.
+      setResults({ rawTags: data.tags, reasoning: data.reasoning });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -95,16 +97,36 @@ function App() {
     }
   };
 
+  const getPromoteButtonLabel = () => {
+    switch (trainingStatus.status) {
+      case 'deploying':          return t.deployingButton;
+      case 'deployment_success': return t.deployedButton;
+      case 'deployment_error':   return t.deployErrorButton;
+      default:                   return t.promoteButton;
+    }
+  };
+
+  // Derived from raw tags + current locale. Re-runs on language change so the UI
+  // translates instantly without clearing state or re-fetching from the backend.
+  const techniques = useMemo(() => {
+    if (!results?.rawTags) return [];
+    return results.rawTags.map(tag => {
+      // Optional chaining guards against a locale file missing the techniques object.
+      const info = t.techniques?.[tag] || { name: tag, description: t.unknownTechnique };
+      return { name: info.name, description: info.description };
+    });
+  }, [results, t]);
+
   return (
     <div className="app-container">
       <aside className={`expert-sidebar ${showExpertMode ? 'visible' : ''}`}>
         <div className="sidebar-header">
-          <h2>Panel Ekspercki</h2>
+          <h2>{t.expertPanelTitle}</h2>
         </div>
-        
+
         <div className="sidebar-content">
           <div className="field-group">
-            <label>Dataset (JSONL)</label>
+            <label>{t.datasetLabel}</label>
             <div className="file-input-wrapper">
               <input type="file" onChange={handleFileUpload} />
             </div>
@@ -112,12 +134,12 @@ function App() {
 
           <div className="progress-section">
             <div className="progress-info">
-              <span>Postęp treningu</span>
+              <span>{t.trainingProgress}</span>
               <span>{trainingStatus.training_progress}%</span>
             </div>
             <div className="progress-bar">
-              <div 
-                className="progress-fill" 
+              <div
+                className="progress-fill"
                 style={{ width: `${trainingStatus.training_progress}%` }}
               ></div>
             </div>
@@ -125,12 +147,12 @@ function App() {
 
           <div className="progress-section">
             <div className="progress-info">
-              <span>Ewaluacja</span>
+              <span>{t.evaluationProgress}</span>
               <span>{trainingStatus.evaluation_progress}%</span>
             </div>
             <div className="progress-bar">
-              <div 
-                className="progress-fill" 
+              <div
+                className="progress-fill"
                 style={{ width: `${trainingStatus.evaluation_progress}%` }}
               ></div>
             </div>
@@ -138,11 +160,11 @@ function App() {
 
           <div className="stats-table">
             <div className="stats-header">
-              <span className="col-metric">Metric</span>
-              <span className="col-val">Baseline</span>
-              <span className="col-val">New Model</span>
+              <span className="col-metric">{t.metricCol}</span>
+              <span className="col-val">{t.baselineCol}</span>
+              <span className="col-val">{t.newModelCol}</span>
             </div>
-            
+
             <div className="stats-row">
               <span className="metric-label">F1 (non-empty)</span>
               <span className="stat-value">{trainingStatus.baseline_f1_non_empty.toFixed(4)}</span>
@@ -166,25 +188,23 @@ function App() {
               disabled={trainingStatus.status !== 'ready_to_promote'}
               className="promote-button"
             >
-              {trainingStatus.status === 'deploying' ? 'Wdrażanie...' : 
-               trainingStatus.status === 'deployment_success' ? 'Wdrożono' : 
-               trainingStatus.status === 'deployment_error' ? 'Błąd!' : 'Wdróż model'}
+              {getPromoteButtonLabel()}
             </button>
-            
+
             {/* Status Indicator Circle */}
-            <div 
+            <div
               title={`Status: ${trainingStatus.status}`}
               style={{
-                width: '16px', 
-                height: '16px', 
+                width: '16px',
+                height: '16px',
                 borderRadius: '50%',
                 backgroundColor: (() => {
                   switch (trainingStatus.status) {
-                    case 'deploying': return '#fbbf24'; // Yellow
-                    case 'deployment_success': return '#10b981'; // Green
-                    case 'deployment_error': return '#ef4444'; // Red
-                    case 'ready_to_promote': return '#3b82f6'; // Blue
-                    default: return '#9ca3af'; // Gray
+                    case 'deploying':          return '#fbbf24';
+                    case 'deployment_success': return '#10b981';
+                    case 'deployment_error':   return '#ef4444';
+                    case 'ready_to_promote':   return '#3b82f6';
+                    default:                   return '#9ca3af';
                   }
                 })(),
                 transition: 'background-color 0.3s ease'
@@ -197,18 +217,35 @@ function App() {
       <main className="main-content">
         <header className="main-header">
           <div className="brand-text">
-            <h1>Detektor Dezinformacji</h1>
-            <p>Analiza treści z wykorzystaniem AI</p>
+            <h1>{t.appTitle}</h1>
+            <p>{t.appSubtitle}</p>
           </div>
-          
-          <div className="expert-toggle">
-            <span>Tryb ekspercki</span>
-            <button 
-              onClick={() => setShowExpertMode(!showExpertMode)}
-              className={`toggle-switch ${showExpertMode ? 'on' : 'off'}`}
-            >
-              <div className="handle" />
-            </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+            {/* Language Switcher */}
+            <div className="lang-switcher">
+              <button
+                onClick={() => {
+                  setLanguage(language === 'ua' ? 'pl' : 'ua');
+                  // Raw tags stay in state; the 'techniques' useMemo re-runs on language change.
+                }}
+                className="lang-button"
+                title={language === 'ua' ? 'Przełącz na polski' : 'Перемкнути на українську'}
+              >
+                {t.langSwitchLabel}
+              </button>
+            </div>
+
+            {/* Expert Mode Toggle */}
+            <div className="expert-toggle">
+              <span>{t.expertModeLabel}</span>
+              <button
+                onClick={() => setShowExpertMode(!showExpertMode)}
+                className={`toggle-switch ${showExpertMode ? 'on' : 'off'}`}
+              >
+                <div className="handle" />
+              </button>
+            </div>
           </div>
         </header>
 
@@ -227,32 +264,40 @@ function App() {
             {results && (
               <div className="analysis-results">
                 <div className="labels-list">
-                  {results.techniques.map((tech, index) => (
-                    <span 
-                      key={index} 
-                      className="tech-badge has-tooltip" 
+                  {techniques.map((tech, index) => (
+                    <span
+                      key={index}
+                      className="tech-badge has-tooltip"
                       data-title={tech.description}
                     >
                       {tech.name}
                     </span>
                   ))}
                 </div>
-                
-                <div className="reasoning-block">
-                  <p className="reasoning-text">{results.reasoning}</p>
-                </div>
+
+                {language === 'ua' && (
+                  <div className="disclaimer">
+                    <p>{t.disclaimer}</p>
+                  </div>
+                )}
+
+                {results.reasoning && (
+                  <div className="reasoning-block">
+                    <p className="reasoning-text">{results.reasoning}</p>
+                  </div>
+                )}
               </div>
             )}
-            
+
             {!isAnalyzing && !results && !error && (
               <div className="placeholder">
-                <p>Wprowadź tekst do analizy...</p>
+                <p>{t.inputPrompt}</p>
               </div>
             )}
-            
-            {results && results.techniques.length === 0 && !isAnalyzing && (
+
+            {results && techniques.length === 0 && !isAnalyzing && (
               <div className="placeholder">
-                <p>Nie wykryto technik manipulacji.</p>
+                <p>{t.noTechniques}</p>
               </div>
             )}
           </section>

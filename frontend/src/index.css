@@ -199,9 +199,10 @@ body {
 }
 
 .main-header {
-  text-align: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   margin-bottom: 3rem;
-  position: relative;
 }
 
 .brand-text h1 {
@@ -220,10 +221,31 @@ body {
   font-size: 0.9rem;
 }
 
+/* Language switcher */
+.lang-switcher {
+  display: flex;
+  align-items: center;
+}
+
+.lang-button {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.lang-button:hover {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+
 .expert-toggle {
-  position: absolute;
-  top: -2rem;
-  right: 0;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -323,6 +345,20 @@ body {
   pointer-events: none;
   min-width: 200px;
   text-align: center;
+}
+
+/* AI disclaimer shown in Ukrainian mode */
+.disclaimer {
+  border-left: 2px solid var(--border-subtle);
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.disclaimer p {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  line-height: 1.5;
 }
 
 .reasoning-text {
