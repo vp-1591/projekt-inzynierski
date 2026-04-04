@@ -28,13 +28,19 @@ dist-ssr
 *.pt
 *.pth
 *.jsonl
+*.pyc
 /unsloth_compiled_cache
 
 /backend/unsloth_compiled_cache
 /model/*
-# benchmark-reports are now ignored
 !/model/Modelfile
+!/model/benchmark-reports/
+
+# Benchmark reports: ignore root files, allow subfolders (adapters)
+/model/benchmark-reports/*.txt
+!/model/benchmark-reports/*/
+!/model/benchmark-reports/**/report.txt
+
 .env
 section-*.txt
-report.txt
 **/benchmark_report_*.txt
