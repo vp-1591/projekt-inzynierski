@@ -171,6 +171,7 @@ body {
 }
 
 .positive { color: var(--success); }
+.negative { color: #ef4444; }
 
 .promote-button {
   width: 100%;

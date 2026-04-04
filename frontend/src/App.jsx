@@ -63,7 +63,7 @@ function App() {
   };
 
   const handlePromote = async () => {
-    if (trainingStatus.new_f1 < trainingStatus.baseline_f1) {
+    if (trainingStatus.new_f1_non_empty < trainingStatus.baseline_f1_non_empty) {
       if (!window.confirm("Ostrzeżenie: Nowy model ma niższe F1 score niż bazowy. Czy na pewno chcesz go wdrożyć?")) {
         return;
       }
@@ -143,7 +143,7 @@ function App() {
             <div className="stats-row">
               <span className="metric-label">F1 (non-empty)</span>
               <span className="stat-value">{trainingStatus.baseline_f1_non_empty.toFixed(4)}</span>
-              <span className={`stat-value ${trainingStatus.new_f1_non_empty >= trainingStatus.baseline_f1_non_empty ? 'positive' : ''}`}>
+              <span className={`stat-value ${trainingStatus.new_f1_non_empty > trainingStatus.baseline_f1_non_empty ? 'positive' : trainingStatus.new_f1_non_empty < trainingStatus.baseline_f1_non_empty ? 'negative' : ''}`}>
                 {trainingStatus.new_f1_non_empty.toFixed(4)}
               </span>
             </div>
@@ -151,7 +151,7 @@ function App() {
             <div className="stats-row">
               <span className="metric-label">Exact Match (all docs)</span>
               <span className="stat-value">{trainingStatus.baseline_exact_match.toFixed(4)}</span>
-              <span className={`stat-value ${trainingStatus.new_exact_match >= trainingStatus.baseline_exact_match ? 'positive' : ''}`}>
+              <span className={`stat-value ${trainingStatus.new_exact_match > trainingStatus.baseline_exact_match ? 'positive' : trainingStatus.new_exact_match < trainingStatus.baseline_exact_match ? 'negative' : ''}`}>
                 {trainingStatus.new_exact_match.toFixed(4)}
               </span>
             </div>
@@ -163,7 +163,9 @@ function App() {
               disabled={trainingStatus.status !== 'ready_to_promote'}
               className="promote-button"
             >
-              {trainingStatus.status === 'deploying' ? 'Wdrażanie...' : 'Wdróż model'}
+              {trainingStatus.status === 'deploying' ? 'Wdrażanie...' : 
+               trainingStatus.status === 'deployment_success' ? 'Wdrożono' : 
+               trainingStatus.status === 'deployment_error' ? 'Błąd!' : 'Wdróż model'}
             </button>
             
             {/* Status Indicator Circle */}

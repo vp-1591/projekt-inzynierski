@@ -71,5 +71,7 @@ def normalize_llm_response(content: str) -> dict:
             elif "ANECDOT" in tag_upper: cleaned_tags.add("ANECDOTE")
             else: cleaned_tags.add(tag_upper)
             
-    parsed_content["discovered_techniques"] = list(cleaned_tags)
-    return parsed_content
+    return {
+        "reasoning": parsed_content.get("reasoning", "Brak uzasadnienia."),
+        "discovered_techniques": list(cleaned_tags)
+    }

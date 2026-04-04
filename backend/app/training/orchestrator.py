@@ -47,6 +47,8 @@ class MLOpsOrchestrator:
                     result['em'] = float(match_em.group(1))
                     
                 match_f1 = re.search(r"Mean Document-Level F1 \(excluding empty gold-label docs\): (\d+\.\d+)", content)
+                if not match_f1:
+                    match_f1 = re.search(r"Mean F1 \(Non-empty gold docs\): (\d+\.\d+)", content)
                 if match_f1:
                     result['f1'] = float(match_f1.group(1))
             return result
@@ -87,13 +89,10 @@ class MLOpsOrchestrator:
         base_model_wsl = base_model_win.replace("\\", "/").replace("c:", "/mnt/c").replace("C:", "/mnt/c")
 
         # Get Host IP for WSL-to-Windows callbacks
-        import socket
-        try:
-            host_ip = socket.gethostbyname(socket.gethostname())
-        except:
-            host_ip = "127.0.0.1"
+        # We use the default gateway which is more reliable than nameserver in many WSL2 setups
+        host_ip_cmd = "$(ip route | grep default | awk '{print $3}')"
 
-        cmd = f"wsl --exec python3 -u -m app.training.trainer --data {wsl_path} --output ./model/latest --base {base_model_wsl} --backend http://{host_ip}:8000"
+        cmd = f"wsl --exec bash -c \"python3 -u -m app.training.trainer --data {wsl_path} --output ./model/latest --base {base_model_wsl} --backend http://{host_ip_cmd}:8000\""
         
         try:
             with open(log_file, "w") as f_log:
@@ -154,13 +153,10 @@ class MLOpsOrchestrator:
                 data_wsl = to_wsl(os.path.join(project_root, "model", "dataset", "mipd_test.jsonl"))
                 output_wsl = to_wsl(os.path.join(project_root, "model", "benchmark-reports"))
                 
-                import socket
-                try:
-                    host_ip = socket.gethostbyname(socket.gethostname())
-                except:
-                    host_ip = "127.0.0.1"
+                # Get Host IP for WSL-to-Windows callbacks
+                host_ip_cmd = "$(ip route | grep default | awk '{print $3}')"
                     
-                cmd = f"wsl --exec python3 -u -m app.training.benchmark --adapter {adapter_wsl} --base {base_wsl} --data {data_wsl} --backend http://{host_ip}:8000 --output_dir {output_wsl} --no-tqdm"
+                cmd = f"wsl --exec bash -c \"python3 -u -m app.training.benchmark --adapter {adapter_wsl} --base {base_wsl} --data {data_wsl} --backend http://{host_ip_cmd}:8000 --output_dir {output_wsl} --no-tqdm\""
                 
                 # Internal logging
                 os.makedirs("logs", exist_ok=True)
@@ -192,7 +188,9 @@ class MLOpsOrchestrator:
                             
                             # Parse metrics from live output
                             if "FINAL_F1_SCORE:" in line:
-                                try: captured_f1 = float(line.split(":")[1].strip())
+                                try: 
+                                    captured_f1 = float(line.split(":")[1].strip())
+                                    self.new_f1_non_empty = captured_f1
                                 except: pass
                             
                             if "FINAL_EXACT_MATCH:" in line:
@@ -275,18 +273,21 @@ class MLOpsOrchestrator:
             if path.startswith("/mnt/d/"): return path.replace("/mnt/d/", "d:/")
             return path
             
-        gguf_win_dir = wsl_to_win(adapter_path.rstrip("/") + "_gguf")
+        gguf_win_target = wsl_to_win(adapter_path.rstrip("/") + "_gguf")
         
         found_gguf_path = None
-        try:
-            for file in os.listdir(gguf_win_dir):
-                if file.endswith(".gguf"):
-                    found_gguf_path = os.path.join(gguf_win_dir, file).replace("\\", "/")
-                    break
-        except Exception as e:
-            print(f"GGUF directory access error: {e}")
-            self.status = "ready_to_promote"
-            return False
+        if os.path.isfile(gguf_win_target):
+            found_gguf_path = gguf_win_target.replace("\\", "/")
+        else:
+            try:
+                for file in os.listdir(gguf_win_target):
+                    if file.endswith(".gguf") or file.endswith("gguf"):
+                        found_gguf_path = os.path.join(gguf_win_target, file).replace("\\", "/")
+                        break
+            except Exception as e:
+                print(f"GGUF access error: {e}")
+                self.status = "ready_to_promote"
+                return False
             
         if not found_gguf_path:
             self.status = "ready_to_promote"

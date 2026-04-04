@@ -48,3 +48,4 @@ dist-ssr
 .env
 section-*.txt
 **/benchmark_report_*.txt
+~$*.docx
