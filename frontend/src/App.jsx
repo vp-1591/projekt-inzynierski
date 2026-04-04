@@ -18,24 +18,27 @@ function App() {
     new_exact_match: 0
   });
 
-  const pollInterval = useRef(null);
-
   useEffect(() => {
+    let ws = null;
     if (showExpertMode) {
-      pollInterval.current = setInterval(async () => {
-        try {
-          const response = await fetch('http://localhost:8000/training/status');
-          const data = await response.json();
-          setTrainingStatus(data);
-        } catch (err) {
-          console.error("Failed to poll status", err);
-        }
-      }, 2000);
-    } else {
-      if (pollInterval.current) clearInterval(pollInterval.current);
+      ws = new WebSocket('ws://localhost:8000/ws/training/status');
+      
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        setTrainingStatus(data);
+      };
+
+      ws.onerror = (err) => {
+        console.error("WebSocket error:", err);
+      };
+
+      ws.onclose = () => {
+        console.log("WebSocket connection closed");
+      };
     }
+
     return () => {
-      if (pollInterval.current) clearInterval(pollInterval.current);
+      if (ws) ws.close();
     };
   }, [showExpertMode]);
 

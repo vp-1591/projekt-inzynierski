@@ -19,6 +19,13 @@ class MLOpsOrchestrator:
         self.new_exact_match = 0.0
         self.status = "idle" # idle, training, evaluating, ready_to_promote
         self.latest_adapter_path = None
+        self.on_status_change = [] # Callbacks taking (status_dict)
+
+    def notify(self):
+        """Triggers all registered status change callbacks."""
+        status = self.get_status()
+        for callback in self.on_status_change:
+            callback(status)
 
     def get_status(self):
         """Aggregates and returns the full pipeline status and metrics."""
@@ -63,6 +70,7 @@ class MLOpsOrchestrator:
         self.status = "training"
         self.training_progress = 0
         self.evaluation_progress = 0
+        self.notify()
         
         # Persist run metadata
         new_run = database.TrainingRun(
@@ -114,6 +122,7 @@ class MLOpsOrchestrator:
             self.status = "idle"
             new_run.status = "failed"
             self.db.commit()
+            self.notify()
             return False
 
     def update_progress(self, stage: str, value: int):
@@ -122,6 +131,7 @@ class MLOpsOrchestrator:
             self.training_progress = value
         elif stage == "evaluation":
             self.evaluation_progress = value
+        self.notify()
 
     def finish_training_and_evaluate(self, adapter_path: str):
         """Transitions the pipeline from training to benchmark evaluation."""
@@ -129,6 +139,7 @@ class MLOpsOrchestrator:
         self.training_progress = 100
         self.evaluation_progress = 0
         self.latest_adapter_path = adapter_path
+        self.notify()
         
         import threading
         
@@ -206,9 +217,11 @@ class MLOpsOrchestrator:
                     self.status = "ready_to_promote"
                 else:
                     self.status = "idle"
+                self.notify()
             except Exception as e:
                 print(f"Benchmark error: {e}")
                 self.status = "idle"
+                self.notify()
 
         threading.Thread(target=run_benchmark).start()
 
@@ -227,6 +240,7 @@ class MLOpsOrchestrator:
 
         # --- Phase 1: GGUF Conversion ---
         self.status = "deploying" 
+        self.notify()
         log_deploy(f"Converting adapter: {adapter_path}")
         
         from dotenv import load_dotenv
@@ -260,11 +274,13 @@ class MLOpsOrchestrator:
             if process.returncode != 0:
                  log_deploy(f"Conversion failed (code {process.returncode})")
                  self.status = "ready_to_promote" 
+                 self.notify()
                  return False
             log_deploy("Conversion successful.")
         except Exception as e:
             log_deploy(f"Conversion runtime error: {e}")
             self.status = "ready_to_promote"
+            self.notify()
             return False
 
         # --- Phase 2: Hot-Swap ---
@@ -287,10 +303,12 @@ class MLOpsOrchestrator:
             except Exception as e:
                 print(f"GGUF access error: {e}")
                 self.status = "ready_to_promote"
+                self.notify()
                 return False
             
         if not found_gguf_path:
             self.status = "ready_to_promote"
+            self.notify()
             return False
 
         # Update Modelfile
@@ -303,6 +321,7 @@ class MLOpsOrchestrator:
         # Reload Ollama using CLI
         try:
             self.status = "deploying"
+            self.notify()
             create_cmd = ["ollama", "create", "bielik-lora-mipd", "-f", modelfile_path]
             process = subprocess.run(create_cmd, capture_output=True, text=True, encoding='utf-8')
             
@@ -310,9 +329,11 @@ class MLOpsOrchestrator:
                 raise Exception(f"Ollama create failed: {process.stderr}")
             
             self.status = "deployment_success"
+            self.notify()
         except Exception as e:
             print(f"Ollama hot-swap failed: {e}")
             self.status = "deployment_error"
+            self.notify()
             return False
             
         # Update baseline report metadata

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, File, UploadFile
+from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import httpx
@@ -21,6 +21,28 @@ app.add_middleware(
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "bielik-lora-mipd:latest"
+
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        import asyncio
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception:
+                pass
+
+manager = ConnectionManager()
 
 
 class AnalysisRequest(BaseModel):
@@ -77,11 +99,19 @@ from .training.orchestrator import MLOpsOrchestrator
 
 orchestrator_instance = None
 
-def get_orchestrator(db: Session = Depends(get_db)):
+async def get_orchestrator(db: Session = Depends(get_db)):
     """Dependency provider for a singleton MLOpsOrchestrator instance."""
     global orchestrator_instance
     if orchestrator_instance is None:
         orchestrator_instance = MLOpsOrchestrator(db)
+        # Register a bridge between Orchestrator and WebSocket broadcast
+        import asyncio
+        main_loop = asyncio.get_running_loop()
+        def ws_notify_bridge(status):
+            if main_loop.is_running():
+                # Use the captured main_loop to securely schedule the coroutine from any thread
+                asyncio.run_coroutine_threadsafe(manager.broadcast(status), main_loop)
+        orchestrator_instance.on_status_change.append(ws_notify_bridge)
     orchestrator_instance.db = db # Ensure current DB session is used
     return orchestrator_instance
 
@@ -110,6 +140,19 @@ async def upload_training_data(
 async def get_training_status(orchestrator: MLOpsOrchestrator = Depends(get_orchestrator)):
     """Returns the current status and progress of the MLOps pipeline."""
     return orchestrator.get_status()
+
+@app.websocket("/ws/training/status")
+async def websocket_training_status(websocket: WebSocket, orchestrator: MLOpsOrchestrator = Depends(get_orchestrator)):
+    """WebSocket endpoint for real-time status updates."""
+    await manager.connect(websocket)
+    # Send initial status
+    await websocket.send_json(orchestrator.get_status())
+    try:
+        while True:
+            # We don't expect messages from client for now, but keep connection open
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
 
 @app.post("/training/promote")
 async def promote_model(orchestrator: MLOpsOrchestrator = Depends(get_orchestrator)):
