@@ -32,6 +32,10 @@ dist-ssr
 /unsloth_compiled_cache
 
 /backend/unsloth_compiled_cache
+/backend/model/latest/
+/backend/*.db
+/backend/uploads/
+/backend/logs/
 /model/*
 !/model/Modelfile
 !/model/benchmark-reports/

@@ -68,6 +68,21 @@ def reset_project_state():
     except Exception as e:
         print(f"Error restoring report: {e}")
 
+    # 6. Delete latest training artifacts and logs
+    print("Deleting temporary training artifacts and logs...")
+    try:
+        latest_model_path = os.path.join(project_root, "backend", "model", "latest")
+        if os.path.exists(latest_model_path):
+            shutil.rmtree(latest_model_path)
+            print(f"Deleted {latest_model_path}")
+            
+        backend_logs_path = os.path.join(project_root, "backend", "logs")
+        if os.path.exists(backend_logs_path):
+            shutil.rmtree(backend_logs_path)
+            print(f"Deleted {backend_logs_path}")
+    except Exception as e:
+        print(f"Error deleting artifacts: {e}")
+
     print("\n--- Project state successfully reset to xai-adapter baseline ---")
 
 if __name__ == "__main__":
