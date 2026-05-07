@@ -6,6 +6,33 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from ..db import database
 
+
+def _project_root():
+    """Resolve the project root directory (parent of backend/)."""
+    current_dir = os.getcwd()
+    if os.path.basename(current_dir) == "backend":
+        return os.path.dirname(current_dir)
+    return current_dir
+
+
+def _to_wsl(path):
+    """Convert a Windows path to a WSL2 path."""
+    return path.replace("\\", "/").replace("c:", "/mnt/c").replace("C:", "/mnt/c")
+
+
+def _get_wsl_host_ip():
+    """Resolve the Windows host IP as seen from WSL2 (NAT default gateway).
+
+    Called from Windows because cmd.exe misinterprets pipe chars inside
+    subprocess.Popen(shell=True), so the IP must be resolved before
+    building the WSL command string.
+    """
+    result = subprocess.run(
+        ['wsl', '--', 'bash', '-c', 'ip route show default | head -1 | cut -d" " -f3'],
+        capture_output=True, text=True, timeout=10
+    )
+    return result.stdout.strip() or "localhost"
+
 class MLOpsOrchestrator:
     """Orchestrates the training, evaluation, and deployment lifecycle of LLM adapters."""
     def __init__(self, db: Session):
@@ -44,7 +71,7 @@ class MLOpsOrchestrator:
         """Parses the current baseline report to extract F1 and Exact-Match scores."""
         result = {'f1': 0.0, 'em': 0.0}
         try:
-            report_path = r"c:\Users\vadim\Documents\Vadym\GitRep\projekt-inzynierski\model\benchmark-reports\current_baseline_report.txt"
+            report_path = os.path.join(_project_root(), "model", "benchmark-reports", "current_baseline_report.txt")
             with open(report_path, "r", encoding="utf-8") as f:
                 content = f.read()
                 
@@ -87,20 +114,15 @@ class MLOpsOrchestrator:
         os.makedirs(log_dir, exist_ok=True)
         log_file = os.path.join(log_dir, f"training_{new_run.id}.log")
         
-        current_dir = os.getcwd()
-        if os.path.basename(current_dir) == "backend":
-            project_root = os.path.dirname(current_dir)
-        else:
-            project_root = current_dir
-            
-        base_model_win = os.path.join(project_root, "model", "bielik-4.5b-base")
-        base_model_wsl = base_model_win.replace("\\", "/").replace("c:", "/mnt/c").replace("C:", "/mnt/c")
+        project_root = _project_root()
+        base_model_wsl = _to_wsl(os.path.join(project_root, "model", "bielik-4.5b-base"))
 
         # Get Host IP for WSL-to-Windows callbacks
-        # We use the default gateway which is more reliable than nameserver in many WSL2 setups
-        host_ip_cmd = "$(ip route | grep default | awk '{print $3}')"
+        # Resolve the gateway IP on the Windows side — cmd.exe misinterprets pipes
+        # inside subprocess.Popen(shell=True), so $(ip route | grep ...) breaks.
+        host_ip = _get_wsl_host_ip()
 
-        cmd = f"wsl --exec bash -c \"python3 -u -m app.training.trainer --data {wsl_path} --output ./model/latest --base {base_model_wsl} --backend http://{host_ip_cmd}:8000\""
+        cmd = f"wsl --exec bash -c \"python3 -u -m app.training.trainer --data {wsl_path} --output ./model/latest --base {base_model_wsl} --backend http://{host_ip}:8000\""
         
         try:
             with open(log_file, "w") as f_log:
@@ -146,28 +168,24 @@ class MLOpsOrchestrator:
         def run_benchmark():
             """Worker thread for running the evaluation benchmark in WSL."""
             try:
-                current_dir = os.getcwd()
-                project_root = os.path.dirname(current_dir) if os.path.basename(current_dir) == "backend" else current_dir
-                
-                def to_wsl(path):
-                    return path.replace("\\", "/").replace("c:", "/mnt/c").replace("C:", "/mnt/c")
-                
+                project_root = _project_root()
+
                 # Handle adapter path conversion
                 if adapter_path.startswith("/mnt/"):
                     adapter_wsl = adapter_path
                 else:
                     adapter_full_win = os.path.normpath(os.path.abspath(os.path.join(project_root, adapter_path) if not os.path.isabs(adapter_path) else adapter_path))
-                    adapter_wsl = to_wsl(adapter_full_win)
+                    adapter_wsl = _to_wsl(adapter_full_win)
 
                 # Prepare WSL command parameters
-                base_wsl = to_wsl(os.path.join(project_root, "model", "bielik-4.5b-base"))
-                data_wsl = to_wsl(os.path.join(project_root, "model", "dataset", "mipd_test.jsonl"))
-                output_wsl = to_wsl(os.path.join(project_root, "model", "benchmark-reports"))
+                base_wsl = _to_wsl(os.path.join(project_root, "model", "bielik-4.5b-base"))
+                data_wsl = _to_wsl(os.path.join(project_root, "model", "dataset", "mipd_test.jsonl"))
+                output_wsl = _to_wsl(os.path.join(project_root, "model", "benchmark-reports"))
                 
                 # Get Host IP for WSL-to-Windows callbacks
-                host_ip_cmd = "$(ip route | grep default | awk '{print $3}')"
-                    
-                cmd = f"wsl --exec bash -c \"python3 -u -m app.training.benchmark --adapter {adapter_wsl} --base {base_wsl} --data {data_wsl} --backend http://{host_ip_cmd}:8000 --output_dir {output_wsl} --no-tqdm\""
+                host_ip = _get_wsl_host_ip()
+
+                cmd = f"wsl --exec bash -c \"python3 -u -m app.training.benchmark --adapter {adapter_wsl} --base {base_wsl} --data {data_wsl} --backend http://{host_ip}:8000 --output_dir {output_wsl} --no-tqdm\""
                 
                 # Internal logging
                 os.makedirs("logs", exist_ok=True)
@@ -242,17 +260,11 @@ class MLOpsOrchestrator:
         self.status = "deploying" 
         self.notify()
         log_deploy(f"Converting adapter: {adapter_path}")
-        
-        from dotenv import load_dotenv
-        env_path = os.path.join(os.path.dirname(os.getcwd()), ".env")
-        if not os.path.exists(env_path):
-             env_path = os.path.join(os.getcwd(), "..", ".env")
-        
-        load_dotenv(env_path)
-        hf_token = os.getenv("HF_TOKEN", "")
-        
-        env_prefix = f"HF_TOKEN={hf_token} " if hf_token else ""
-        inner_cmd = f"{env_prefix}python3 -u -m app.training.converter --adapter {adapter_path} --base-model-id speakleash/Bielik-4.5B-v3.0-Instruct --output {adapter_path}_gguf --quant_method q4_k_m"
+
+        project_root = _project_root()
+        base_model_wsl = _to_wsl(os.path.join(project_root, "model", "bielik-4.5b-base"))
+
+        inner_cmd = f"python3 -u -m app.training.converter --adapter {adapter_path} --base {base_model_wsl} --output {adapter_path}_gguf --quant_method q4_k_m"
         conversion_cmd = f'wsl --exec bash -c "{inner_cmd}"'
         
         try:
@@ -312,7 +324,7 @@ class MLOpsOrchestrator:
             return False
 
         # Update Modelfile
-        modelfile_path = "c:/Users/vadim/Documents/Vadym/GitRep/projekt-inzynierski/model/Modelfile"
+        modelfile_path = os.path.join(_project_root(), "model", "Modelfile")
         with open(modelfile_path, "r") as f: lines = f.readlines()
         with open(modelfile_path, "w") as f:
             for line in lines:
@@ -338,7 +350,7 @@ class MLOpsOrchestrator:
             
         # Update baseline report metadata
         try:
-            project_root = r"c:/Users/vadim/Documents/Vadym/GitRep/projekt-inzynierski"
+            project_root = _project_root()
             reports_dir = os.path.join(project_root, "model", "benchmark-reports")
             baseline_report_path = os.path.join(reports_dir, "current_baseline_report.txt")
             

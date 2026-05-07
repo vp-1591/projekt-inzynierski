@@ -1,4 +1,8 @@
 import os
+os.environ["UNSLOTH_DISABLE_STATISTICS"] = "1"
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
 import sys
 import torch
 from unsloth import FastLanguageModel
@@ -59,6 +63,7 @@ class ModelTrainer:
             max_seq_length = max_seq_length,
             load_in_4bit = True,
             use_gradient_checkpointing = "unsloth",
+            local_files_only = True,
         )
 
         # Initialize LoRA adapters

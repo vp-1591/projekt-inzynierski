@@ -62,7 +62,8 @@ async def analyze_text(request: AnalysisRequest):
         "model": MODEL_NAME,
         "messages": [{"role": "user", "content": request.text}],
         "stream": False,
-        "format": "json"
+        "format": "json",
+        "keep_alive": 0
     }
     print("\n--- DEBUG: POŁĄCZENIE Z LLM ---")
     print(f"MODEL: {MODEL_NAME}")

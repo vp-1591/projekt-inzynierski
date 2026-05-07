@@ -1,0 +1,115 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Polish-language disinformation detection system using Explainable AI (XAI). Identifies 11 manipulation techniques in media texts via a fine-tuned Bielik-4.5B LLM with LoRA adapters. The system is an engineering thesis project ("praca inżynierska").
+
+## Commands
+
+**Start all services (Windows):** `./run_app.bat` — launches Ollama, backend, and frontend in separate windows.
+
+**Manual start:**
+
+- Backend: `cd backend && python -m app.main` (FastAPI on :8000)
+- Frontend: `cd frontend && npm run dev` (Vite on :5173)
+
+**Frontend build/lint:**
+
+- `cd frontend && npm run build`
+- `cd frontend && npm run lint`
+
+**Training (requires WSL2 + NVIDIA GPU):**
+
+- WSL dependencies: `pip install unsloth bitsandbytes accelerate torch trl datasets gguf`
+- Training is triggered via the Expert Mode UI, not CLI directly
+
+**Ollama model setup:**
+
+- `ollama create bielik-4.5b -f ./model/Modelfile`
+- The model name used at runtime is `bielik-lora-mipd:latest` (hardcoded in `backend/app/main.py`)
+
+## Architecture
+
+```
+Frontend (React/Vite :5173)
+  └── WebSocket + REST ──→ Backend (FastAPI :8000)
+                               ├── /analyze → Ollama (:11434) → Bielik LLM
+                               ├── /ws/training/status → real-time pipeline updates
+                               ├── SQLite (disinfo_system.db) → TrainingRun records
+                               └── /upload, /train, /promote → MLOps pipeline
+```
+
+**Data flow for analysis:** User text → Frontend → FastAPI `/analyze` → Ollama `/api/chat` → LLM response → `llm_processor.normalize_llm_response()` (3-phase healing: JSON parse → schema normalization → tag validation) → structured result to frontend.
+
+**MLOps pipeline (orchestrator.py):** Upload `.jsonl` → trainer.py (Unsloth SFT in WSL2) → benchmark.py (evaluation on mipd_test.jsonl) → converter.py (HF→GGUF) → hot-swap via Ollama CLI. Progress is reported through callbacks → WebSocket broadcast.
+
+## Key Design Decisions
+
+- **LLM response healing** (`backend/app/llm_processor.py`): The 4.5B model often outputs malformed JSON. A 3-phase pipeline (JSON parse → regex recovery → fuzzy key/tag normalization) handles this. Any changes to the output schema must update both `VALID_TAGS` and the regex patterns.
+
+- **11 valid technique tags** are defined in both `backend/app/llm_processor.py` (`VALID_TAGS` set) and `frontend/src/services/disinformationDetector.js` (`TECHNIQUE_MAPPING`). These must stay in sync.
+
+- **Ollama Modelfile** (`model/Modelfile`) uses ChatML template (`<|im_start|>`, `<|im_end|>`) — critical for Bielik model. The system prompt defines the exact JSON output format and allowed technique categories.
+
+- **Training runs only in WSL2**: Unsloth requires Linux. The backend detects `os.name == 'nt'` and warns. The `ProgressCallback` in trainer.py POSTs progress back to the Windows backend at `http://localhost:8000/training/progress`.
+
+- **Baseline metrics** are read from `model/benchmark-reports/current_baseline_report.txt` via regex parsing in `orchestrator.py`.
+
+## Environment
+
+- `.env` requires `HF_TOKEN` (HuggingFace read token) for model config downloads
+- Git submodule: `backend/vendor/llama.cpp` (run `git submodule update --init --recursive`)
+- Database: SQLite file `backend/disinfo_system.db`
+- Test dataset: `model/dataset/mipd_test.jsonl` (1521 documents)
+- Model files: `model/bielik-4.5b-base/` (GGUF base), `model/xai-adapter/` (production LoRA)
+
+## UI Language
+
+The entire UI and system prompts are in Polish. Technique names displayed to users are Polish translations of the English tags (e.g., `STRAWMAN` → "Chochoł (Słomiana kukła)").
+
+## Git Commits
+
+Do not add "Co-Authored-By: Claude ..." or any AI attribution lines to commit messages.
+
+## Architecture Decision Records (ADRs)
+
+Before making any non-trivial code change, create or update an ADR in the `docs/adr/` directory.
+
+### File naming
+
+`NNNN-short-kebab-case-title.md` — pad the number to 4 digits (e.g. `0001-use-event-sourcing.md`).
+
+### Required ADR structure
+
+```
+# NNNN: Title
+
+## Status
+Proposed | Accepted | Deprecated | Superseded by [NNNN]
+
+## Context
+What problem or situation prompted this decision?
+
+## Decision
+What was decided and why?
+
+## Consequences
+What are the trade-offs, risks, or follow-up actions?
+```
+
+### When to write an ADR
+
+- Introducing or removing a dependency
+- Changing an architectural pattern or data flow
+- Any edit touching more than one module/layer
+- Reversing or overriding a previous decision
+
+### Inline reasoning for small edits
+
+For single-file edits too small for a full ADR, add a comment directly above the changed block:
+
+```
+# REASON: <why this change was made>
+```

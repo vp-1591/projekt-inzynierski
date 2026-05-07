@@ -29,6 +29,7 @@ dist-ssr
 *.pth
 *.jsonl
 *.pyc
+.venv/
 /unsloth_compiled_cache
 
 /backend/unsloth_compiled_cache

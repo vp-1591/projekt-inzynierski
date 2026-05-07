@@ -12,7 +12,12 @@ if %ERRORLEVEL% NEQ 0 (
     echo [OK] Ollama is running.
 )
 
-start cmd /k "cd backend && python -m app.main"
+if not exist "backend\.venv\Scripts\activate.bat" (
+    echo Setting up virtual environment...
+    python -m venv backend\.venv
+    call backend\.venv\Scripts\activate.bat && pip install -r backend\requirements.txt
+)
+start cmd /k "call backend\.venv\Scripts\activate.bat && cd backend && python -m app.main"
 start cmd /k "cd frontend && npm run dev"
 
 echo Services are starting in separate windows.

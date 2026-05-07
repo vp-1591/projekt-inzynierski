@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__word-document-server__get_document_outline",
+      "mcp__word-document-server__search_and_replace",
+      "mcp__word-document-server__get_paragraph_text_from_document",
+      "mcp__word-document-server__find_text_in_document",
+      "Bash(wsl *)",
+      "WebSearch",
+      "Bash(powershell *)"
+    ]
+  }
+}
