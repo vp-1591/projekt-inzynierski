@@ -341,19 +341,18 @@ class MLOpsOrchestrator:
                 raise Exception(f"Ollama create failed: {process.stderr}")
             
             self.status = "deployment_success"
-            self.notify()
         except Exception as e:
             print(f"Ollama hot-swap failed: {e}")
             self.status = "deployment_error"
             self.notify()
             return False
-            
+
         # Update baseline report metadata
         try:
             project_root = _project_root()
             reports_dir = os.path.join(project_root, "model", "benchmark-reports")
             baseline_report_path = os.path.join(reports_dir, "current_baseline_report.txt")
-            
+
             candidates = [os.path.join(reports_dir, f) for f in os.listdir(reports_dir) if f.startswith("benchmark_report_") and f.endswith(".txt")]
             if candidates:
                 latest_report = sorted(candidates, key=os.path.getmtime, reverse=True)[0]
@@ -361,5 +360,12 @@ class MLOpsOrchestrator:
                 shutil.copy2(latest_report, baseline_report_path)
         except Exception as e:
             print(f"Failed to update baseline metadata: {e}")
-            
+
+        # REASON: notify() must fire after the baseline file is updated so the
+        # frontend receives fresh metrics. The old polling approach masked this
+        # ordering bug; WebSockets only push on explicit notify().
+        self.new_f1_non_empty = 0.0
+        self.new_exact_match = 0.0
+        self.notify()
+
         return True

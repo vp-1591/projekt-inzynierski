@@ -50,3 +50,4 @@ dist-ssr
 section-*.txt
 **/benchmark_report_*.txt
 ~$*.docx
+.gitattributes
