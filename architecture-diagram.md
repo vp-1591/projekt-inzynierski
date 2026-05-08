@@ -1,76 +1,65 @@
+# Architecture Diagram
+
+## Inference Pipeline (Primary)
+
+```mermaid
 graph TD
-        %% Styles
-        classDef model fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
-        classDef data fill:#fff3e0,stroke:#e65100,stroke-width:2px;
-        classDef process fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,stroke-dasharray: 5 5;
-        classDef infra fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px;
-        classDef decision fill:#fff9c4,stroke:#fbc02d,stroke-width:2px,shape:diamond;
-        classDef empty width:0px,height:0px,fill:none,stroke:none;
+    classDef user fill:#1565c0,stroke:#0d47a1,stroke-width:2px,color:#fff;
+    classDef frontend fill:#2e7d32,stroke:#1b5e20,stroke-width:2px,color:#fff;
+    classDef backend fill:#e65100,stroke:#bf360c,stroke-width:2px,color:#fff;
+    classDef model fill:#6a1b9a,stroke:#4a148c,stroke-width:2px,color:#fff;
+    classDef result fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff;
 
-        subgraph Data_Generation ["Phase 1: Synthetic Data Generation (Knowledge Distillation)"]
-            direction TB
-            spacer_DG[ ]:::empty
-            spacer_DG ~~~ MIPD
-            MIPD[("MIPD Dataset<br/>(Text + Labels)")]:::data
-            Qwen[("Teacher Model<br/>Qwen-2.5-7B-Instruct")]:::model
-            Script_Gen["Hard-Constraint Generator<br/>(Python Script)"]:::process
-            
-            MIPD --> Script_Gen
-            Qwen --> Script_Gen
-            Script_Gen -->|Generates Reasoning| CoT_Data[("Synthetic Dataset<br/>(Text + Reasoning + Labels)")]:::data
-        end
+    User["<b>User</b><br/>Enters article text"]:::user
+    FE["<b>Frontend</b><br/>React / Vite"]:::frontend
+    BE["<b>Backend</b><br/>FastAPI + LLM Healer"]:::backend
+    LLM["<b>Model</b><br/>Ollama · Bielik-4.5B + LoRA"]:::model
+    Result["<b>Result</b><br/>Detected techniques<br/>+ reasoning"]:::result
 
-        subgraph Training ["Phase 2: Supervised Fine-Tuning (SFT)"]
-            direction TB
-            spacer_Tr[ ]:::empty
-            spacer_Tr ~~~ Bielik_Base
-            Bielik_Base[("Student Model<br/>Bielik-4.5B-Instruct")]:::model
-            Unsloth["Unsloth Trainer<br/>(QLoRA, 4-bit, RoPE Scaling, 16k ctx)"]:::process
-            Adapter[("LoRA Adapter")]:::model
-            
-            CoT_Data --> Unsloth
-            Bielik_Base --> Unsloth
-            Unsloth --> Adapter
-        end
+    User -->|Text| FE
+    FE -->|POST /analyze| BE
+    BE -->|/api/chat| LLM
+    LLM -->|Raw JSON| BE
+    BE -->|Validated result| FE
+    FE -->|Highlight & explanation| Result
+```
 
-        subgraph Inference ["Phase 3: Local Inference Architecture"]
-            direction TB
-            spacer_Inf[ ]:::empty
-            spacer_Inf ~~~ Bielik_GGUF
-            Bielik_GGUF[("Base Model<br/>Q8_0.gguf")]:::model
-            LoRA_GGUF[("Adapter<br/>F32.gguf")]:::model
-            Ollama["Ollama Server<br/>(Runtime Adapter Loading)"]:::infra
-            React["React Frontend<br/>(Inference UI)"]:::infra
-            
-            Bielik_GGUF -.-> Ollama
-            LoRA_GGUF -.-> Ollama
-            Ollama <-->|"/api/chat"| React
-        end
+## MLOps Retraining Loop (Secondary)
 
-        subgraph MLOps ["Phase 4: MLOps Loop (Human-in-the-Loop)"]
-            direction TB
-            spacer_MLOps[ ]:::empty
-            spacer_MLOps ~~~ Engineer
-            Engineer["Engineer (Expert Mode)"]:::infra
-            Upload["Upload Retraining Dataset<br/>(.jsonl)"]:::process
-            FastAPI["Backend Orchestrator<br/>(FastAPI)"]:::process
-            Retrain["Trigger Retraining"]:::process
-            New_Adapter[("New Adapter")]:::model
-            Benchmark["Auto-Benchmark"]:::process
-            Result_View["View Results:<br/>Doc-Level F1 (Non-Empty) & Accuracy"]:::infra
-            Decision{"Approve New<br/>Adapter?"}:::decision
-            
-            Engineer --> Upload
-            Upload --> FastAPI
-            FastAPI --> Retrain
-            Retrain --> New_Adapter
-            New_Adapter --> Benchmark
-            Benchmark --> Result_View
-            Result_View --> Decision
-            Decision -->|Yes| FastAPI
-            FastAPI -.->|Hot-Swap Model| Ollama
-            Decision -->|No| Discard["Discard Adapter"]:::process
-        end
+```mermaid
+graph TD
+    classDef human fill:#1565c0,stroke:#0d47a1,stroke-width:2px,color:#fff;
+    classDef process fill:#e65100,stroke:#bf360c,stroke-width:2px,color:#fff;
+    classDef model fill:#6a1b9a,stroke:#4a148c,stroke-width:2px,color:#fff;
+    classDef decision fill:#c62828,stroke:#b71c1c,stroke-width:2px,color:#fff;
 
-        %% Cross-graph connections
-        Adapter -.->|Convert to GGUF| LoRA_GGUF
+    Eng["<b>Engineer</b><br/>(Expert Mode)"]:::human
+    Upload["Upload .jsonl dataset"]:::process
+    Train["SFT Training<br/>(Unsloth · QLoRA)"]:::process
+    Adapter[("LoRA Adapter")]:::model
+    Bench["Auto-Benchmark<br/>(F1 & Accuracy)"]:::process
+    Approve{"Approve?"}:::decision
+
+    Eng --> Upload --> Train --> Adapter --> Bench --> Approve
+    Approve -->|Yes| Deploy["Hot-swap model<br/>in Ollama"]:::process
+    Approve -->|No| Discard["Discard"]:::process
+
+    Deploy -.->|New weights| LLM_REF["Model (see Inference)"]
+```
+
+## Data Generation Pipeline (Offline, Pre-Project)
+
+```mermaid
+graph LR
+    classDef data fill:#e65100,stroke:#bf360c,stroke-width:2px,color:#fff;
+    classDef model fill:#6a1b9a,stroke:#4a148c,stroke-width:2px,color:#fff;
+    classDef process fill:#37474f,stroke:#263238,stroke-width:2px,color:#fff,stroke-dasharray: 5 5;
+
+    MIPD[("MIPD Dataset")]:::data
+    Qwen[("Qwen-2.5-7B<br/>(Teacher)")]:::model
+    Gen["Constraint<br/>Generator"]:::process
+    CoT[("Synthetic Dataset<br/>(Text + Reasoning + Labels)")]:::data
+
+    MIPD --> Gen
+    Qwen --> Gen --> CoT
+```

@@ -4,7 +4,7 @@ System do wykrywania 11 technik manipulacji w tekstach medialnych w języku pols
 
 ## Wymagania
 
-- **OS**: Windows 10/11 z WSL2 (Ubuntu) — trening wymaga środowiska Linux
+- **OS**: Windows 10/11 z [WSL2](https://learn.microsoft.com/pl-pl/windows/wsl/install) (Ubuntu) — trening wymaga środowiska Linux
 - **GPU**: NVIDIA z min. 8 GB VRAM (dla treningu 4-bit)
 - **Ollama**: [ollama.com](https://ollama.com)
 - **Python 3.11+**, **Node.js 18+**
@@ -21,7 +21,11 @@ git submodule update --init --recursive
 
 ### 2. Pliki modelu (~7.7 GB)
 
-Katalog `model/` jest gitignore'd — należy go pobrać oddzielnie i umieścić w katalogu projektu. Powinien zawierać:
+Katalog `model/` jest gitignore'd — należy go pobrać oddzielnie i umieścić w katalogu projektu.
+
+**Pobierz pliki modelu:** [Google Drive](https://drive.google.com/file/d/1b17N4rKeinj1ahqTz-nhMtxZT8k02OYD/view?usp=sharing)
+
+Powinien zawierać:
 
 ```
 model/

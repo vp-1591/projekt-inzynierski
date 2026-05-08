@@ -59,7 +59,6 @@ Frontend (React/Vite :5173)
 
 ## Environment
 
-- `.env` requires `HF_TOKEN` (HuggingFace read token) for model config downloads
 - Git submodule: `backend/vendor/llama.cpp` (run `git submodule update --init --recursive`)
 - Database: SQLite file `backend/disinfo_system.db`
 - Test dataset: `model/dataset/mipd_test.jsonl` (1521 documents)
