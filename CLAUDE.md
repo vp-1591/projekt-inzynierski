@@ -8,7 +8,7 @@ Polish-language disinformation detection system using Explainable AI (XAI). Iden
 
 ## Commands
 
-**Start all services (Windows):** `./run_app.bat` — launches Ollama, backend, and frontend in separate windows.
+**Start all services (Windows):** `./run_app.cmd` — launches Ollama, backend, and frontend in separate windows.
 
 **Manual start:**
 

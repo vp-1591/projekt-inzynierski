@@ -1,85 +1,131 @@
-# System detekcji dezinformacji i błędów logicznych w tekstach medialnych z wykorzystaniem wyjaśnialnej sztucznej inteligencji (XAI)
+# AntyDezinformator — System detekcji dezinformacji z XAI
 
-System do wykrywania technik manipulacji w tekstach w języku polskim, oparty na modelu **Bielik-4.5B-Instruct**. Projekt integruje inferencję, automatyczny trening (SFT) oraz ewaluację w jeden pełny cykl MLOps.
+System do wykrywania 11 technik manipulacji w tekstach medialnych w języku polskim, oparty na modelu **Bielik-4.5B-Instruct** z adapterami LoRA. Projekt integruje inferencję, automatyczny trening (SFT) oraz ewaluację w jeden cykl MLOps.
 
-## 🚀 Architektura Systemu
+## Wymagania
 
-- **Frontend**: React (Vite) - Nowoczesny interfejs z "Panelem Eksperckim" do zarządzania cyklem życia modelu.
-- **Backend Orchestrator**: FastAPI - Serce systemu zarządzające inferencją, bazą danych (SQLite) i procesami MLOps.
-- **Inference**: Ollama - Lokalny serwer LLM obsługujący model Bielik z adapterami LoRA.
-- **Training (WSL2)**: Unsloth + Hugging Face - Optymalizowany pod kątem VRAM potok treningowy działający w środowisku Linux (WSL2).
+- **OS**: Windows 10/11 z WSL2 (Ubuntu) — trening wymaga środowiska Linux
+- **GPU**: NVIDIA z min. 8 GB VRAM (dla treningu 4-bit)
+- **Ollama**: [ollama.com](https://ollama.com)
+- **Python 3.11+**, **Node.js 18+**
 
-## 🛠️ Instalacja i Konfiguracja
+## Instalacja
 
-### 1. Wymagania Sprzętowe (Wersja Deweloperska)
-- **GPU**: NVIDIA (min. 8GB VRAM dla treningu 4-bit).
-- **OS**: Windows 10/11 z zainstalowanym **WSL2** (Ubuntu).
-- **Zależności GIT**: Projekt korzysta z podmodułów (llama.cpp).
-  ```bash
-  git submodule update --init --recursive
-  ```
+### 1. Klonowanie i submoduły
 
-### 2. Konfiguracja Zmiennych Środowiskowych
-1. Utwórz plik `.env` w głównym katalogu projektu:
-   ```env
-   HF_TOKEN=twoj_token_hugging_face_read
-   ```
-   *Jest to wymagane, aby skrypty konwersji mogły pobrać konfigurację modelu bazowego (Bielik).*
+```bash
+git clone <repo-url>
+cd projekt-inzynierski
+git submodule update --init --recursive
+```
 
-### 3. Przygotowanie Ollama
-1. Zainstaluj [Ollama](https://ollama.ai/).
-2. Pobierz bazowy model Bielik (lub zaimportuj z Modelfile):
-   ```bash
-   ollama create bielik-4.5b -f ./model/Modelfile
-   ```
+### 2. Pliki modelu (~7.7 GB)
 
-### 4. Konfiguracja Backend (Windows)
-1. Przejdź do folderu `backend`.
-2. Zainstaluj zależności:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Uruchom serwer:
-   ```bash
-   python -m app.main
-   ```
+Katalog `model/` jest gitignore'd — należy go pobrać oddzielnie i umieścić w katalogu projektu. Powinien zawierać:
 
-### 5. Konfiguracja Training Environment (WSL2)
-1. Otwórz terminal WSL2 (Ubuntu).
-2. Zainstaluj wymagane biblioteki:
-   ```bash
-   pip install unsloth bitsandbytes accelerate torch trl datasets gguf
-   ```
-   *Uwaga: `gguf` jest wymagany do konwersji adapterów.*
-3. Upewnij się, że masz dostęp do GPU (`nvidia-smi` wewnątrz WSL).
+```
+model/
+├── bielik-4.5b-base/
+│   ├── Bielik-4.5B-v3.0-Instruct.Q8_0.gguf   (~4.7 GB)
+│   ├── model.safetensors                        (~2.5 GB)
+│   ├── config.json, tokenizer.json, ...
+│   └── ...
+├── xai-adapter/checkpoint-2475/
+│   ├── checkpoint-2475-F32-LoRA.gguf            (~190 MB)
+│   ├── adapter_model.safetensors                 (~190 MB)
+│   └── ...
+├── dataset/
+│   ├── mipd_train_cot_clean.jsonl                (~55 MB)
+│   ├── mipd_test.jsonl                           (~8.5 MB)
+│   └── mipd_val.jsonl                            (~18 MB)
+├── benchmark-reports/   (już w repozytorium)
+└── Modelfile            (już w repozytorium)
+```
 
-### 6. Konfiguracja Frontend (Windows)
-1. Przejdź do folderu `frontend`.
-2. Zainstaluj zależności:
-   ```bash
-   npm install
-   ```
-3. Uruchom aplikację:
-   ```bash
-   npm run dev
-   ```
+### 3. Automatyczna konfiguracja
 
-## 🧠 Cykl MLOps (Human-in-the-Loop)
+Uruchom `setup.cmd` — skrypt:
 
-1. **Analiza**: Wprowadź tekst w głównym oknie, aby zobaczyć wykryte techniki przez aktualny model.
-2. **Tryb Ekspercki**: Aktywuj przełącznik w prawym górnym rogu.
-3. **Trening**: 
-   - Prześlij plik `.jsonl` z nowymi przykładami (format Alpaca/ChatML).
-   - System automatycznie uruchomi proces `trainer.py` wewnątrz WSL2.
-   - Postęp treningu jest raportowany w czasie rzeczywistym na pasku bocznym.
-4. **Ewaluacja**: Po treningu system automatycznie uruchamia benchmark na zbiorze testowym (`model/datasets/mipd_test.jsonl`).
-5. **Wdrożenie (Hot-Swap)**: Jeśli nowy wynik F1 jest satysfakcjonujący, kliknij "Potwierdź Zmianę Modelu". System zaktualizuje Ollama bez restartu usług.
+1. Inicjalizuje submoduły git (`llama.cpp`)
+2. Tworzy środowisko wirtualne Python i instaluje zależności
+3. Instaluje zależności frontend (npm)
+4. Rozwiązuje ścieżkę ADAPTER w `Modelfile` na absolutną
+5. Rejestruje model w Ollama (`bielik-lora-mipd`)
 
-## 📊 Metryki
-System mierzy:
-- **PSR (Parsing Success Rate)**: Procent odpowiedzi, które są poprawnym syntaktycznie formatem JSON.
-- **F1 Score (Strict)**: Średnia harmoniczna precyzji i czułości dla dokumentów zawierających techniki manipulacji (ignoruje puste dokumenty w zbiorze testowym).
-- **Exact Match**: Odsetek dokumentów, w których model idealnie odtworzył zbiór technik (identyczne techniki, bez nadmiarowych/brakujących).
+```cmd
+setup.cmd
+```
+
+Wymagane: Ollama musi być uruchomiona przed `setup.cmd`.
+
+### 4. Ręczna konfiguracja (alternatywa)
+
+Jeśli wolisz konfigurować ręcznie:
+
+```bash
+# Backend
+python -m venv backend/.venv
+backend/.venv/Scripts/activate && pip install -r backend/requirements.txt
+
+# Frontend
+cd frontend && npm install && cd ..
+
+# Ollama — zaktualizuj ścieżkę ADAPTER w model/Modelfile na absolutną, potem:
+ollama create bielik-lora-mipd -f model/Modelfile
+```
+
+### 5. Środowisko treningowe (WSL2)
+
+Trening działa wyłącznie w WSL2. W terminalu Ubuntu:
+
+```bash
+pip install unsloth bitsandbytes accelerate torch trl datasets gguf
+nvidia-smi   # sprawdź dostęp do GPU
+```
+
+Trening jest uruchamiany przez Panel Ekspercki w UI, nie z CLI.
+
+## Uruchomienie
+
+```cmd
+run_app.cmd
+```
+
+Uruchamia Ollama, backend (FastAPI :8000) i frontend (Vite :5173).
+
+## Cykl MLOps
+
+1. **Analiza** — wpisz tekst, zobacz wykryte techniki manipulacji
+2. **Tryb Ekspercki** — przełącznik w prawym górnym rogu
+3. **Trening** — prześlij plik `.jsonl`, system uruchamia SFT w WSL2, postęp w czasie rzeczywistym
+4. **Ewaluacja** — automatyczny benchmark na `mipd_test.jsonl`
+5. **Hot-swap** — zatwierdź nowy model, Ollama aktualizuje się bez restartu
+
+## Reset do stanu początkowego
+
+```cmd
+reset_state.cmd
+```
+
+Przywraca adapter `xai-adapter` jako aktywny model, resetuje raport benchmark i usuwa artefakty treningowe.
+
+## Architektura
+
+```
+Frontend (React/Vite :5173)
+  └── WebSocket + REST ──→ Backend (FastAPI :8000)
+                               ├── /analyze → Ollama (:11434) → Bielik LLM
+                               ├── /ws/training/status → real-time pipeline updates
+                               ├── SQLite (disinfo_system.db)
+                               └── /upload, /train, /promote → MLOps pipeline
+```
+
+## Metryki
+
+- **PSR** — Parsing Success Rate (% poprawnych odpowiedzi JSON)
+- **F1 Score (Strict)** — średnia harmoniczna precyzji i czułości dla technik manipulacji
+- **Exact Match** — % dokumentów z idealnie odtworzonym zbiorem technik
 
 ---
+
 *Projekt zrealizowany w ramach pracy inżynierskiej.*

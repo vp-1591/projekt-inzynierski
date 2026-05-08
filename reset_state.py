@@ -10,7 +10,7 @@ def reset_project_state():
     # 1. Configuration
     project_root = os.getcwd()
     modelfile_path = os.path.join(project_root, "model", "Modelfile")
-    baseline_adapter_path = "c:/Users/vadim/Documents/Vadym/GitRep/projekt-inzynierski/model/xai-adapter/checkpoint-2475/checkpoint-2475-F32-LoRA.gguf"
+    baseline_adapter_path = os.path.join(project_root, "model", "xai-adapter", "checkpoint-2475", "checkpoint-2475-F32-LoRA.gguf")
     
     baseline_report_src = os.path.join(project_root, "model", "benchmark-reports", "xai-adapter", "report.txt")
     baseline_report_dst = os.path.join(project_root, "model", "benchmark-reports", "current_baseline_report.txt")
