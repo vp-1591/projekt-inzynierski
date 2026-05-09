@@ -7,7 +7,8 @@ System do wykrywania 11 technik manipulacji w tekstach medialnych w języku pols
 - **OS**: Windows 10/11 z [WSL2](https://learn.microsoft.com/pl-pl/windows/wsl/install) (Ubuntu) — trening wymaga środowiska Linux
 - **GPU**: NVIDIA z min. 8 GB VRAM (dla treningu 4-bit)
 - **Ollama**: [ollama.com](https://ollama.com)
-- **Python 3.11+**, **Node.js 18+**
+- **Python 3.11+**: [python.org/downloads](https://www.python.org/downloads/)
+- **Node.js 18+**: [nodejs.org](https://nodejs.org/)
 
 ## Instalacja
 

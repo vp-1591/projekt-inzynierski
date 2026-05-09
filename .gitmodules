@@ -1,3 +1,6 @@
 [submodule "backend/vendor/llama.cpp"]
 	path = backend/vendor/llama.cpp
 	url = https://github.com/ggerganov/llama.cpp
+[submodule "colab-notebooks"]
+	path = colab-notebooks
+	url = https://github.com/vp-1591/colab-notebooks.git
