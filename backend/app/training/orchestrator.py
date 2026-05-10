@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import subprocess
 import httpx
@@ -17,7 +18,14 @@ def _project_root():
 
 def _to_wsl(path):
     """Convert a Windows path to a WSL2 path."""
-    return path.replace("\\", "/").replace("c:", "/mnt/c").replace("C:", "/mnt/c")
+    path = path.replace("\\", "/")
+    return re.sub(r'^([A-Za-z]):', lambda m: f'/mnt/{m.group(1).lower()}', path)
+
+
+def _wsl_python():
+    """Return the WSL venv Python path, falling back to system python3."""
+    venv_python = _to_wsl(os.path.join(_project_root(), "backend", ".venv-wsl", "bin", "python"))
+    return venv_python
 
 
 def _get_wsl_host_ip():
@@ -31,7 +39,10 @@ def _get_wsl_host_ip():
         ['wsl', '--', 'bash', '-c', 'ip route show default | head -1 | cut -d" " -f3'],
         capture_output=True, text=True, timeout=10
     )
-    return result.stdout.strip() or "localhost"
+    if result.returncode != 0:
+        return "localhost"
+    ip = result.stdout.strip().replace('\x00', '')
+    return ip or "localhost"
 
 class MLOpsOrchestrator:
     """Orchestrates the training, evaluation, and deployment lifecycle of LLM adapters."""
@@ -108,7 +119,7 @@ class MLOpsOrchestrator:
         self.db.commit()
 
         # Resolve paths & environment
-        wsl_path = file_path.replace("\\", "/").replace("c:", "/mnt/c").replace("C:", "/mnt/c")
+        wsl_path = _to_wsl(file_path)
         
         log_dir = "logs"
         os.makedirs(log_dir, exist_ok=True)
@@ -122,20 +133,21 @@ class MLOpsOrchestrator:
         # inside subprocess.Popen(shell=True), so $(ip route | grep ...) breaks.
         host_ip = _get_wsl_host_ip()
 
-        cmd = f"wsl --exec bash -c \"python3 -u -m app.training.trainer --data {wsl_path} --output ./model/latest --base {base_model_wsl} --backend http://{host_ip}:8000\""
+        cmd = f"wsl --exec bash -c \"{_wsl_python()} -u -m app.training.trainer --data {wsl_path} --output ./model/latest --base {base_model_wsl} --backend http://{host_ip}:8000\""
         
         try:
-            with open(log_file, "w") as f_log:
+            with open(log_file, "w", encoding="utf-8") as f_log:
                 f_log.write(f"--- Training started at {datetime.utcnow()} ---\n")
                 f_log.write(f"COMMAND: {cmd}\n\n")
             
-            f_log = open(log_file, "a")
+            f_log = open(log_file, "a", encoding="utf-8")
             process = subprocess.Popen(
-                cmd, 
-                shell=True, 
-                stdout=f_log, 
+                cmd,
+                shell=True,
+                stdout=f_log,
                 stderr=subprocess.STDOUT,
-                universal_newlines=True
+                encoding="utf-8",
+                errors="replace"
             )
             print(f"Training started (PID: {process.pid}). Logs: {log_file}")
             return True
@@ -185,13 +197,13 @@ class MLOpsOrchestrator:
                 # Get Host IP for WSL-to-Windows callbacks
                 host_ip = _get_wsl_host_ip()
 
-                cmd = f"wsl --exec bash -c \"python3 -u -m app.training.benchmark --adapter {adapter_wsl} --base {base_wsl} --data {data_wsl} --backend http://{host_ip}:8000 --output_dir {output_wsl} --no-tqdm\""
+                cmd = f"wsl --exec bash -c \"{_wsl_python()} -u -m app.training.benchmark --adapter {adapter_wsl} --base {base_wsl} --data {data_wsl} --backend http://{host_ip}:8000 --output_dir {output_wsl} --no-tqdm\""
                 
                 # Internal logging
                 os.makedirs("logs", exist_ok=True)
                 bench_log_file = os.path.join("logs", f"benchmark_{int(datetime.utcnow().timestamp())}.log")
                 
-                with open(bench_log_file, "w") as f:
+                with open(bench_log_file, "w", encoding="utf-8") as f:
                     f.write(f"--- Benchmark started at {datetime.utcnow()} ---\n")
                     f.write(f"Command: {cmd}\n")
 
@@ -200,13 +212,14 @@ class MLOpsOrchestrator:
                     shell=True,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
-                    universal_newlines=True
+                    encoding="utf-8",
+                    errors="replace"
                 )
                 
                 captured_f1 = 0.0
                 captured_em = 0.0
                 
-                with open(bench_log_file, "a") as f_bench:
+                with open(bench_log_file, "a", encoding="utf-8") as f_bench:
                     while True:
                         line = process.stdout.readline()
                         if not line and process.poll() is not None:
@@ -264,7 +277,7 @@ class MLOpsOrchestrator:
         project_root = _project_root()
         base_model_wsl = _to_wsl(os.path.join(project_root, "model", "bielik-4.5b-base"))
 
-        inner_cmd = f"python3 -u -m app.training.converter --adapter {adapter_path} --base {base_model_wsl} --output {adapter_path}_gguf --quant_method q4_k_m"
+        inner_cmd = f"{_wsl_python()} -u -m app.training.converter --adapter {adapter_path} --base {base_model_wsl} --output {adapter_path}_gguf --quant_method q4_k_m"
         conversion_cmd = f'wsl --exec bash -c "{inner_cmd}"'
         
         try:
@@ -279,7 +292,7 @@ class MLOpsOrchestrator:
                 while True:
                     line = await process.stdout.readline()
                     if not line: break
-                    f_log.write(f"{line.decode().strip()}\n")
+                    f_log.write(f"{line.decode('utf-8', errors='replace').strip()}\n")
                     f_log.flush()
 
             await process.wait()
@@ -325,8 +338,8 @@ class MLOpsOrchestrator:
 
         # Update Modelfile
         modelfile_path = os.path.join(_project_root(), "model", "Modelfile")
-        with open(modelfile_path, "r") as f: lines = f.readlines()
-        with open(modelfile_path, "w") as f:
+        with open(modelfile_path, "r", encoding="utf-8") as f: lines = f.readlines()
+        with open(modelfile_path, "w", encoding="utf-8") as f:
             for line in lines:
                 f.write(f"ADAPTER {found_gguf_path}\n" if line.startswith("ADAPTER") else line)
         

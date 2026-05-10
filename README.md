@@ -16,8 +16,6 @@ System do wykrywania 11 technik manipulacji w tekstach medialnych w języku pols
 
 ```bash
 git clone <repo-url>
-cd projekt-inzynierski
-git submodule update --init --recursive
 ```
 
 ### 2. Pliki modelu (~7.7 GB)
@@ -51,11 +49,12 @@ model/
 
 Uruchom `setup.cmd` — skrypt:
 
-1. Inicjalizuje submoduły git (`llama.cpp`)
-2. Tworzy środowisko wirtualne Python i instaluje zależności
-3. Instaluje zależności frontend (npm)
-4. Rozwiązuje ścieżkę ADAPTER w `Modelfile` na absolutną
-5. Rejestruje model w Ollama (`bielik-lora-mipd`)
+1. Sprawdza wymagania (Python, npm, Ollama)
+2. Inicjalizuje submoduły git (`llama.cpp`)
+3. Tworzy środowisko wirtualne Python i instaluje zależności
+4. Instaluje zależności frontend (npm)
+5. Konfiguruje środowisko treningowe WSL2 (`.venv-wsl` + `requirements-wsl.txt`)
+6. Rozwiązuje ścieżkę ADAPTER w `Modelfile` i rejestruje model w Ollama (pomija jeśli istnieje)
 
 ```cmd
 setup.cmd
@@ -68,6 +67,9 @@ Wymagane: Ollama musi być uruchomiona przed `setup.cmd`.
 Jeśli wolisz konfigurować ręcznie:
 
 ```bash
+# Submoduły git
+git submodule update --init --recursive
+
 # Backend
 python -m venv backend/.venv
 backend/.venv/Scripts/activate && pip install -r backend/requirements.txt
@@ -75,16 +77,23 @@ backend/.venv/Scripts/activate && pip install -r backend/requirements.txt
 # Frontend
 cd frontend && npm install && cd ..
 
+# WSL2 — środowisko treningowe (opcjonalnie, jeśli WSL dostępne)
+wsl bash -lc "cd $(wslpath -u 'C:\...\projekt-inzynierski\backend') && \
+  python3 -m venv .venv-wsl && .venv-wsl/bin/pip install -r requirements-wsl.txt"
+
 # Ollama — zaktualizuj ścieżkę ADAPTER w model/Modelfile na absolutną, potem:
 ollama create bielik-lora-mipd -f model/Modelfile
 ```
 
 ### 5. Środowisko treningowe (WSL2)
 
-Trening działa wyłącznie w WSL2. W terminalu Ubuntu:
+`setup.cmd` sprawdza automatycznie, czy WSL ma `python3` i `python3-venv`, i tworzy `.venv-wsl` z zależnościami z `backend/requirements-wsl.txt`. Jeśli instalacja nie powiedzie się, w terminalu Ubuntu:
 
 ```bash
-pip install unsloth bitsandbytes accelerate torch trl datasets gguf
+sudo apt update && sudo apt install -y python3 python3-venv python3-pip
+cd $(wslpath -u 'C:\...\projekt-inzynierski\backend')
+python3 -m venv .venv-wsl
+.venv-wsl/bin/pip install -r requirements-wsl.txt
 nvidia-smi   # sprawdź dostęp do GPU
 ```
 
@@ -133,4 +142,4 @@ Frontend (React/Vite :5173)
 
 ---
 
-*Projekt zrealizowany w ramach pracy inżynierskiej.*
+_Projekt zrealizowany w ramach pracy inżynierskiej._

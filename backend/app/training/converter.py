@@ -19,7 +19,7 @@ def _strip_bnb_config(base_dir):
     if not os.path.exists(config_path):
         return base_dir
 
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         config = json.load(f)
 
     if "quantization_config" not in config:
@@ -31,7 +31,7 @@ def _strip_bnb_config(base_dir):
         dst = os.path.join(tmp_dir, entry)
         if entry == "config.json":
             clean = {k: v for k, v in config.items() if k != "quantization_config"}
-            with open(dst, "w") as f:
+            with open(dst, "w", encoding="utf-8") as f:
                 json.dump(clean, f, indent=2)
         else:
             if os.path.isdir(src):

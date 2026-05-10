@@ -1,0 +1,8 @@
+# Training dependencies — installed inside WSL2 (requires NVIDIA GPU + CUDA)
+unsloth
+bitsandbytes
+accelerate
+torch
+trl
+datasets
+gguf

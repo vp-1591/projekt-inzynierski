@@ -20,7 +20,11 @@
       "Bash(ls -la model/xai-adapter/)",
       "Bash(ls -la model/dataset/)",
       "Bash(ls -la model/benchmark-reports/)",
-      "mcp__word-document-server__get_document_xml"
+      "mcp__word-document-server__get_document_xml",
+      "mcp__word-document-server__insert_header_near_text",
+      "mcp__word-document-server__format_text",
+      "mcp__word-document-server__replace_paragraph_block_below_header",
+      "mcp__word-document-server__delete_paragraph"
     ]
   }
 }

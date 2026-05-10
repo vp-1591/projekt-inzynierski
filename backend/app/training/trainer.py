@@ -49,7 +49,7 @@ class ModelTrainer:
         # Check GPU memory status
         try:
             cmd = "nvidia-smi --query-gpu=memory.total,memory.used,memory.free --format=csv,noheader"
-            output = subprocess.check_output(cmd, shell=True).decode().strip()
+            output = subprocess.check_output(cmd, shell=True, encoding="utf-8", errors="replace").strip()
             total, used, free = output.split(',')
             print(f"GPU Status: Total: {total}, Used: {used}, Free: {free}", file=sys.stderr, flush=True)
         except Exception as e:

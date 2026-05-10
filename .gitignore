@@ -30,6 +30,7 @@ dist-ssr
 *.jsonl
 *.pyc
 .venv/
+.venv-wsl/
 /unsloth_compiled_cache
 
 /backend/unsloth_compiled_cache

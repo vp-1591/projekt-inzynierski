@@ -11,20 +11,23 @@ echo.
 :: ── Prerequisite checks ──────────────────────────────────────────────
 set "MISSING=0"
 
-where python >nul 2>&1
-if errorlevel 1 (
-    echo [MISSING] Python is not on PATH. Install Python 3.10+ from https://www.python.org/downloads/ and add it to PATH.
+where python >nul 2>&1 && (
+    echo [OK] python found
+) || (
+    echo [MISSING] Python is not on PATH. Install Python 3.11+ from https://www.python.org/downloads/ and add it to PATH.
     set "MISSING=1"
 )
 
-where npm >nul 2>&1
-if errorlevel 1 (
+where npm >nul 2>&1 && (
+    echo [OK] npm found
+) || (
     echo [MISSING] npm is not on PATH. Install Node.js LTS from https://nodejs.org/ and add it to PATH.
     set "MISSING=1"
 )
 
-where ollama >nul 2>&1
-if errorlevel 1 (
+where ollama >nul 2>&1 && (
+    echo [OK] ollama found
+) || (
     echo [MISSING] Ollama is not on PATH. Install from https://ollama.com and add it to PATH.
     set "MISSING=1"
 )
@@ -32,8 +35,7 @@ if errorlevel 1 (
 if "%MISSING%"=="1" (
     echo.
     echo [ABORT] Install the missing prerequisites above and re-run setup.
-    pause
-    exit /b 1
+    goto :done
 )
 
 :: ── Git submodules ────────────────────────────────────────────────────
@@ -41,8 +43,7 @@ echo Initializing git submodules...
 git submodule update --init --recursive
 if errorlevel 1 (
     echo [ERROR] git submodule update failed.
-    pause
-    exit /b 1
+    goto :done
 )
 
 :: ── Python virtual environment ────────────────────────────────────────
@@ -50,15 +51,21 @@ if not exist "%PROJECT_ROOT%\backend\.venv\Scripts\activate.bat" (
     echo Creating Python virtual environment...
     python -m venv "%PROJECT_ROOT%\backend\.venv"
     if errorlevel 1 (
+        echo.
         echo [ERROR] Failed to create Python virtual environment.
-        pause
-        exit /b 1
+        echo.
+        echo Troubleshooting:
+        echo   1. Re-run the Python installer from https://www.python.org/downloads/
+        echo   2. Check "Add Python to PATH" and "Install pip" options.
+        echo   3. If using a corporate/managed machine, the venv module may be
+        echo      blocked by policy. Try: python -m venv test_env
+        echo.
+        goto :done
     )
     call "%PROJECT_ROOT%\backend\.venv\Scripts\activate.bat" && pip install -r "%PROJECT_ROOT%\backend\requirements.txt"
     if errorlevel 1 (
         echo [ERROR] Failed to install Python dependencies.
-        pause
-        exit /b 1
+        goto :done
     )
 ) else (
     echo [OK] Python virtual environment already exists.
@@ -72,13 +79,60 @@ if not exist "%PROJECT_ROOT%\frontend\node_modules" (
     if errorlevel 1 (
         echo [ERROR] npm install failed.
         popd
-        pause
-        exit /b 1
+        goto :done
     )
     popd
 ) else (
     echo [OK] Frontend dependencies already installed.
 )
+
+:: ── WSL2 training dependencies ──────────────────────────────────────────
+where wsl >nul 2>&1 || goto :skip_wsl
+
+echo Checking WSL2 training environment...
+wsl echo ok >nul 2>&1 || goto :no_wsl_distro
+
+echo [OK] WSL2 distro found. Checking prerequisites...
+
+:: Check python3 exists in WSL
+wsl bash -lc "python3 --version" >nul 2>&1 || goto :no_wsl_python
+
+:: Check python3-venv module is available
+wsl bash -lc "python3 -c 'import venv'" >nul 2>&1 || goto :no_wsl_venv
+
+echo [OK] WSL2 Python prerequisites met. Setting up training environment...
+wsl bash -lc "cd $(wslpath -u '%PROJECT_ROOT%/backend') && test -d .venv-wsl || python3 -m venv .venv-wsl && .venv-wsl/bin/pip install -r requirements-wsl.txt"
+if errorlevel 1 (
+    echo [WARNING] WSL dependency install failed. Training will not work.
+    echo   Try re-running setup.cmd or install manually:
+    echo     wsl bash -lc "sudo apt install python3-venv python3-pip"
+) else (
+    echo [OK] WSL training dependencies installed.
+)
+goto :after_wsl
+
+:skip_wsl
+echo [SKIP] WSL not available. Training is unavailable on Windows.
+goto :after_wsl
+
+:no_wsl_distro
+echo [SKIP] No WSL2 distro installed. Training is unavailable on Windows.
+echo   Install a WSL2 distro with: wsl --install -d Ubuntu
+goto :after_wsl
+
+:no_wsl_python
+echo [SKIP] Python3 not found in WSL. Training is unavailable.
+echo   Install Python inside WSL:
+echo     wsl bash -lc "sudo apt update && sudo apt install -y python3 python3-pip"
+goto :after_wsl
+
+:no_wsl_venv
+echo [SKIP] python3-venv not available in WSL. Training is unavailable.
+echo   Install the venv module inside WSL:
+echo     wsl bash -lc "sudo apt install -y python3-venv"
+goto :after_wsl
+
+:after_wsl
 
 :: ── Ollama model ──────────────────────────────────────────────────────
 set "ADAPTER_PATH=%PROJECT_ROOT%\model\xai-adapter\checkpoint-2475\checkpoint-2475-F32-LoRA.gguf"
@@ -91,21 +145,27 @@ if not exist "%ADAPTER_PATH%" (
     echo Place model files in model\ and re-run setup.
     echo.
 ) else (
-    :: Update Modelfile with absolute ADAPTER path (Ollama requires absolute paths)
-    echo Configuring Ollama model...
-    powershell -Command "(Get-Content '%PROJECT_ROOT%\model\Modelfile') -replace '^ADAPTER .*$', ('ADAPTER ' + '%ADAPTER_PATH%'.Replace('\','/')) | Set-Content '%PROJECT_ROOT%\model\Modelfile'"
+    ollama list 2>nul | findstr /i "bielik-lora-mipd" >nul 2>&1 && (
+        echo [OK] Ollama model 'bielik-lora-mipd' already exists.
+    ) || (
+        :: Update Modelfile with absolute ADAPTER path (Ollama requires absolute paths)
+        echo Configuring Ollama model...
+        powershell -Command "(Get-Content '%PROJECT_ROOT%\model\Modelfile') -replace '^ADAPTER .*$', ('ADAPTER ' + '%ADAPTER_PATH%'.Replace('\','/')) | Set-Content '%PROJECT_ROOT%\model\Modelfile'"
 
-    echo Creating Ollama model 'bielik-lora-mipd'...
-    ollama create bielik-lora-mipd -f "%PROJECT_ROOT%\model\Modelfile"
-    if errorlevel 1 (
-        echo [ERROR] Failed to create Ollama model. Make sure Ollama is running.
-        pause
-        exit /b 1
-    ) else (
-        echo [OK] Ollama model 'bielik-lora-mipd' created.
+        echo Creating Ollama model 'bielik-lora-mipd'...
+        ollama create bielik-lora-mipd -f "%PROJECT_ROOT%\model\Modelfile"
+        if errorlevel 1 (
+            echo [ERROR] Failed to create Ollama model. Make sure Ollama is running.
+            goto :done
+        ) else (
+            echo [OK] Ollama model 'bielik-lora-mipd' created.
+        )
     )
 )
 
 echo.
 echo Setup complete. Run run_app.cmd to start the services.
+goto :done
+
+:done
 pause
