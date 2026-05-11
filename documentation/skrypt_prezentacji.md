@@ -76,7 +76,7 @@ Przeprowadziłem ewaluację na zbiorze testowym liczącym **1521 próbek** z kor
 
 Model bazowy bez adaptera praktycznie nie nadaje się do zastosowań produkcyjnych — wskaźnik PSR wynosi zaledwie 20%, a F1 — 0,10.
 
-**Prototype Adapter**, dostrojony wyłącznie pod kątem klasyfikacji, osiąga F1 równe **0,49** — co przewyższa wyniki PL-RoBERTa-Large raportowane w literaturze dla tego samego zbioru.
+**Prototype Adapter**, dostrojony wyłącznie pod kątem klasyfikacji, osiąga F1 równe **0,49** — co przewyższa wyniki PL-RoBERTa-Large raportowane w literaturze dla tego samego zbioru. Należy jednak zaznaczyć, że porównanie nie jest w pełni równoważne metodologicznie: literatura raportuje weighted F1 dla pełnego zbioru, natomiast w niniejszej pracy zastosowano Mean Document-Level F1 wyłącznie dla próbek niepustych (z niepustymi gold labels).
 
 **XAI Adapter** — wersja z warstwą wyjaśnialności — osiąga niższe F1 równe 0,28, przy zachowaniu dokładności strukturalnej na poziomie 73%. Ten spadek to tzw. **podatek od wyjaśnialności**: dodanie uzasadnień zwiększa złożoność zadania dla modelu, a jakość danych syntetycznych wygenerowanych przez nauczyciela okazała się kluczowym czynnikiem ograniczającym.
 
