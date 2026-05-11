@@ -53,3 +53,7 @@ section-*.txt
 ~$*.docx
 .gitattributes
 *.zip
+
+# Fonts
+*.ttf
+Inter,Platypi,Source_Serif_4/

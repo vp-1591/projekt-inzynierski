@@ -57,6 +57,7 @@ class MLOpsOrchestrator:
         self.new_exact_match = 0.0
         self.status = "idle" # idle, training, evaluating, ready_to_promote
         self.latest_adapter_path = None
+        self.current_run_id = None
         self.on_status_change = [] # Callbacks taking (status_dict)
 
     def notify(self):
@@ -117,6 +118,8 @@ class MLOpsOrchestrator:
         )
         self.db.add(new_run)
         self.db.commit()
+        self.db.refresh(new_run)
+        self.current_run_id = new_run.id
 
         # Resolve paths & environment
         wsl_path = _to_wsl(file_path)
@@ -155,6 +158,7 @@ class MLOpsOrchestrator:
             print(f"Training launch failed: {str(e)}")
             self.status = "idle"
             new_run.status = "failed"
+            new_run.end_time = datetime.utcnow()
             self.db.commit()
             self.notify()
             return False
@@ -246,8 +250,22 @@ class MLOpsOrchestrator:
                 if process.returncode == 0:
                     self.new_f1_non_empty = captured_f1
                     self.status = "ready_to_promote"
+                    if self.current_run_id:
+                        run = self.db.query(database.TrainingRun).get(self.current_run_id)
+                        if run:
+                            run.f1_score_before = self.read_baseline_metrics()['f1']
+                            run.f1_score_after = captured_f1
+                            run.end_time = datetime.utcnow()
+                            run.status = "ready_to_promote"
+                            self.db.commit()
                 else:
                     self.status = "idle"
+                    if self.current_run_id:
+                        run = self.db.query(database.TrainingRun).get(self.current_run_id)
+                        if run:
+                            run.end_time = datetime.utcnow()
+                            run.status = "failed"
+                            self.db.commit()
                 self.notify()
             except Exception as e:
                 print(f"Benchmark error: {e}")
@@ -354,6 +372,12 @@ class MLOpsOrchestrator:
                 raise Exception(f"Ollama create failed: {process.stderr}")
             
             self.status = "deployment_success"
+            if self.current_run_id:
+                run = self.db.query(database.TrainingRun).get(self.current_run_id)
+                if run:
+                    run.status = "deployed"
+                    run.end_time = datetime.utcnow()
+                    self.db.commit()
         except Exception as e:
             print(f"Ollama hot-swap failed: {e}")
             self.status = "deployment_error"

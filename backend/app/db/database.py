@@ -22,7 +22,7 @@ class TrainingRun(Base):
     end_time = Column(DateTime)
     f1_score_before = Column(Float)
     f1_score_after = Column(Float)
-    status = Column(String)  # "completed", "failed", "running"
+    status = Column(String)  # "running", "ready_to_promote", "deployed", "failed"
     adapter_path = Column(String)
 
 Base.metadata.create_all(bind=engine)

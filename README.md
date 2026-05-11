@@ -99,6 +99,16 @@ nvidia-smi   # sprawdź dostęp do GPU
 
 Trening jest uruchamiany przez Panel Ekspercki w UI, nie z CLI.
 
+### Rozwiązywanie problemów
+
+**Błąd `.venv-wsl/bin/pip: No such file or directory`** — środowisko wirtualne WSL jest uszkodzone. Usuń je i utwórz ponownie:
+
+```bash
+wsl bash -lc "cd /mnt/d/Documents/Vadym/GitRep/projekt-inzynierski/backend && rm -rf .venv-wsl"
+```
+
+Następnie ponownie uruchom `setup.cmd` lub utwórz venv ręcznie (patrz sekcja wyżej).
+
 ## Uruchomienie
 
 ```cmd

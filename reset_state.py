@@ -1,5 +1,6 @@
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 
@@ -68,7 +69,24 @@ def reset_project_state():
     except Exception as e:
         print(f"Error restoring report: {e}")
 
-    # 6. Delete latest training artifacts and logs
+    # 6. Clear stale training run records from the database
+    print("Clearing training_runs table...")
+    db_path = os.path.join(project_root, "backend", "disinfo_system.db")
+    try:
+        if os.path.exists(db_path):
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM training_runs")
+            deleted = cursor.rowcount
+            conn.commit()
+            conn.close()
+            print(f"Cleared {deleted} stale training run(s).")
+        else:
+            print("Database file not found — skipping (will be created on next app start).")
+    except Exception as e:
+        print(f"Error clearing database: {e}")
+
+    # 7. Delete latest training artifacts and logs
     print("Deleting temporary training artifacts and logs...")
     try:
         latest_model_path = os.path.join(project_root, "backend", "model", "latest")
@@ -84,6 +102,8 @@ def reset_project_state():
         print(f"Error deleting artifacts: {e}")
 
     print("\n--- Project state successfully reset to xai-adapter baseline ---")
+    print("(If the database was missing, it will be auto-created with the correct")
+    print(" schema when the backend starts — no manual action needed.)")
 
 if __name__ == "__main__":
     # Ensure we are in the project root (simple heuristic for this project)
