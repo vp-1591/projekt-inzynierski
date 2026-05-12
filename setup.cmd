@@ -5,7 +5,7 @@ setlocal enabledelayedexpansion
 set "PROJECT_ROOT=%~dp0"
 set "PROJECT_ROOT=%PROJECT_ROOT:~0,-1%"
 
-echo Setting up AntyDezinformator...
+echo Setting up System detekcji manipulacji...
 echo.
 
 :: ── Prerequisite checks ──────────────────────────────────────────────

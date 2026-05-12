@@ -1,5 +1,5 @@
 @echo off
-echo Starting AntyDezinformator Services...
+echo Starting System detekcji manipulacji Services...
 
 :: Check if Ollama is running
 ollama list >nul 2>&1

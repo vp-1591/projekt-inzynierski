@@ -1,7 +1,7 @@
 {
-  "name": "antydezinformator-root",
+  "name": "system-detekcji-manipulacji-root",
   "version": "1.0.0",
-  "description": "Root management for AntyDezinformator",
+  "description": "Root management for System detekcji manipulacji",
   "scripts": {
     "install-all": "npm install --prefix frontend && pip install -r backend/requirements.txt",
     "dev": "npx concurrently \"cd frontend && npm run dev\" \"cd backend && python -m app.main\""

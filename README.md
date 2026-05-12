@@ -1,4 +1,4 @@
-# AntyDezinformator — System detekcji dezinformacji z XAI
+# System detekcji manipulacji — wykrywanie dezinformacji z XAI
 
 System do wykrywania 11 technik manipulacji w tekstach medialnych w języku polskim, oparty na modelu **Bielik-4.5B-Instruct** z adapterami LoRA. Projekt integruje inferencję, automatyczny trening (SFT) oraz ewaluację w jeden cykl MLOps.
 

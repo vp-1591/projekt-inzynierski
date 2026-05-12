@@ -1,4 +1,4 @@
-# Skrypt prezentacji — AntyDezinformator
+# Skrypt prezentacji — System detekcji manipulacji
 
 **Autor:** Vadym Abrosimov | **Czas:** ~6 minut
 
