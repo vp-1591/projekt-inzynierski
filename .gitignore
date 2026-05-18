@@ -61,6 +61,7 @@ section-*.txt
 ~$*.docx
 .gitattributes
 *.zip
+_thesis_build
 
 # Fonts
 *.ttf
