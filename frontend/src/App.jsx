@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import './index.css'
 import { InputSection } from './components/InputSection'
 import { analyzeText } from './services/disinformationDetector'
