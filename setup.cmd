@@ -62,13 +62,13 @@ if not exist "%PROJECT_ROOT%\backend\.venv\Scripts\activate.bat" (
         echo.
         goto :done
     )
-    call "%PROJECT_ROOT%\backend\.venv\Scripts\activate.bat" && pip install -r "%PROJECT_ROOT%\backend\requirements.txt"
-    if errorlevel 1 (
-        echo [ERROR] Failed to install Python dependencies.
-        goto :done
-    )
-) else (
-    echo [OK] Python virtual environment already exists.
+)
+
+echo Installing/updating backend dependencies...
+call "%PROJECT_ROOT%\backend\.venv\Scripts\activate.bat" && python -m pip install -r "%PROJECT_ROOT%\backend\requirements.txt"
+if errorlevel 1 (
+    echo [ERROR] Failed to install Python dependencies.
+    goto :done
 )
 
 :: ── Frontend dependencies ─────────────────────────────────────────────
@@ -101,13 +101,25 @@ wsl bash -lc "python3 --version" >nul 2>&1 || goto :no_wsl_python
 wsl bash -lc "python3 -c 'import venv'" >nul 2>&1 || goto :no_wsl_venv
 
 echo [OK] WSL2 Python prerequisites met. Setting up training environment...
-wsl bash -lc "cd $(wslpath -u '%PROJECT_ROOT%/backend') && test -d .venv-wsl || python3 -m venv .venv-wsl && .venv-wsl/bin/pip install -r requirements-wsl.txt"
+wsl bash -lc "cd $(wslpath -u '%PROJECT_ROOT%/backend') && if ! test -x .venv-wsl/bin/python || ! .venv-wsl/bin/python -m pip --version >/dev/null 2>&1; then rm -rf .venv-wsl && python3 -m venv .venv-wsl; fi"
 if errorlevel 1 (
-    echo [WARNING] WSL dependency install failed. Training will not work.
+    echo [WARNING] WSL training environment setup failed. Training will not work.
     echo   Try re-running setup.cmd or install manually:
     echo     wsl bash -lc "sudo apt install python3-venv python3-pip"
 ) else (
-    echo [OK] WSL training dependencies installed.
+    echo Checking installed WSL training dependencies...
+    wsl bash -lc "cd $(wslpath -u '%PROJECT_ROOT%/backend') && .venv-wsl/bin/python check_wsl_dependencies.py requirements-wsl.txt"
+    if errorlevel 1 (
+        echo Installing/updating missing WSL training dependencies...
+        wsl bash -lc "cd $(wslpath -u '%PROJECT_ROOT%/backend') && .venv-wsl/bin/python -m pip install -r requirements-wsl.txt"
+        if errorlevel 1 (
+            echo [WARNING] WSL dependency install failed. Training will not work.
+            echo   Try re-running setup.cmd or install manually:
+            echo     wsl bash -lc "sudo apt install python3-venv python3-pip"
+        ) else (
+            echo [OK] WSL training dependencies installed.
+        )
+    )
 )
 goto :after_wsl
 
