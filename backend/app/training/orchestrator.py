@@ -46,6 +46,13 @@ def _get_wsl_host_ip():
 
 class MLOpsOrchestrator:
     """Orchestrates the training, evaluation, and deployment lifecycle of LLM adapters."""
+    STARTABLE_STATUSES = {
+        "idle",
+        "ready_to_promote",
+        "deployment_success",
+        "deployment_error",
+    }
+
     def __init__(self, db: Session):
         self.db = db
         # Pipeline State
@@ -57,6 +64,8 @@ class MLOpsOrchestrator:
         self.new_exact_match = 0.0
         self.status = "idle" # idle, training, evaluating, ready_to_promote
         self.latest_adapter_path = None
+        self.deployed_adapter_path = None
+        self.last_deployment_status = None
         self.current_run_id = None
         self.on_status_change = [] # Callbacks taking (status_dict)
 
@@ -76,8 +85,19 @@ class MLOpsOrchestrator:
             "baseline_f1_non_empty": baseline['f1'],
             "baseline_exact_match": baseline['em'],
             "new_f1_non_empty": self.new_f1_non_empty,
-            "new_exact_match": self.new_exact_match
+            "new_exact_match": self.new_exact_match,
+            "deployed_adapter_path": self.deployed_adapter_path,
+            "last_deployment_status": self.last_deployment_status
         }
+
+    def reset_candidate_state(self):
+        """Clear per-run candidate state before launching a new training job."""
+        self.training_progress = 0
+        self.evaluation_progress = 0
+        self.new_f1_non_empty = 0.0
+        self.new_exact_match = 0.0
+        self.latest_adapter_path = None
+        self.current_run_id = None
 
     def read_baseline_metrics(self):
         """Parses the current baseline report to extract F1 and Exact-Match scores."""
@@ -103,12 +123,11 @@ class MLOpsOrchestrator:
 
     def start_manual_training(self, file_path: str):
         """Initiates the training process inside WSL and tracks progress."""
-        if self.status not in ["idle", "deployment_success", "deployment_error", "ready_to_promote"]:
+        if self.status not in self.STARTABLE_STATUSES:
             return False
             
+        self.reset_candidate_state()
         self.status = "training"
-        self.training_progress = 0
-        self.evaluation_progress = 0
         self.notify()
         
         # Persist run metadata
@@ -316,12 +335,14 @@ class MLOpsOrchestrator:
             await process.wait()
             if process.returncode != 0:
                  log_deploy(f"Conversion failed (code {process.returncode})")
+                 self.last_deployment_status = "deployment_error"
                  self.status = "ready_to_promote" 
                  self.notify()
                  return False
             log_deploy("Conversion successful.")
         except Exception as e:
             log_deploy(f"Conversion runtime error: {e}")
+            self.last_deployment_status = "deployment_error"
             self.status = "ready_to_promote"
             self.notify()
             return False
@@ -345,11 +366,13 @@ class MLOpsOrchestrator:
                         break
             except Exception as e:
                 print(f"GGUF access error: {e}")
+                self.last_deployment_status = "deployment_error"
                 self.status = "ready_to_promote"
                 self.notify()
                 return False
             
         if not found_gguf_path:
+            self.last_deployment_status = "deployment_error"
             self.status = "ready_to_promote"
             self.notify()
             return False
@@ -372,6 +395,8 @@ class MLOpsOrchestrator:
                 raise Exception(f"Ollama create failed: {process.stderr}")
             
             self.status = "deployment_success"
+            self.last_deployment_status = "deployment_success"
+            self.deployed_adapter_path = adapter_path
             if self.current_run_id:
                 run = self.db.query(database.TrainingRun).get(self.current_run_id)
                 if run:
@@ -381,6 +406,7 @@ class MLOpsOrchestrator:
         except Exception as e:
             print(f"Ollama hot-swap failed: {e}")
             self.status = "deployment_error"
+            self.last_deployment_status = "deployment_error"
             self.notify()
             return False
 

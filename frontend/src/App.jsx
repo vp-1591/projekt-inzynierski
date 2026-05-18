@@ -55,6 +55,10 @@ function App() {
         body: formData,
       });
       if (response.ok) {
+        const statusResponse = await fetch('http://localhost:8000/training/status');
+        if (statusResponse.ok) {
+          setTrainingStatus(await statusResponse.json());
+        }
         alert("Pomyślnie rozpoczęto trening!");
       } else {
         const errorData = await response.json();
@@ -62,6 +66,8 @@ function App() {
       }
     } catch (err) {
       alert("Błąd połączenia: " + err.message);
+    } finally {
+      e.target.value = '';
     }
   };
 
