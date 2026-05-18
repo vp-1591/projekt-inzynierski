@@ -3,8 +3,11 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 import datetime
+from pathlib import Path
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./disinfo_system.db"
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+DATABASE_PATH = BACKEND_DIR / "disinfo_system.db"
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{DATABASE_PATH.as_posix()}"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
