@@ -58,6 +58,10 @@ function App() {
         body: formData,
       });
       if (response.ok) {
+        const statusResponse = await fetch('http://localhost:8000/training/status');
+        if (statusResponse.ok) {
+          setTrainingStatus(await statusResponse.json());
+        }
         alert(t.uploadSuccess);
       } else {
         const errorData = await response.json();
@@ -65,6 +69,8 @@ function App() {
       }
     } catch (err) {
       alert(t.uploadConnError + err.message);
+    } finally {
+      e.target.value = '';
     }
   };
 
