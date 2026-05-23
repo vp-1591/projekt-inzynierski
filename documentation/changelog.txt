@@ -1,30 +1,21 @@
-CHANGELOG — Projekt_43995.docx
-================================
-Zmiany względem commitu 7d3ed42 (2026-05-07)
+CHANGELOG - materialy pracy i obrony
+====================================
 
-Sekcja 1 — Podstawowe informacje
-- Usunięto teksty instrukcji szablonu uczelni (placeholder)
-- Dodano polskie tłumaczenia angielskich terminów (Chain-of-Thought, Human-in-the-Loop, Label-Conditional Distillation, Supervised Fine-Tuning, Runtime Adapter Loading, Knowledge Distillation, Reasoning)
-- DODANO Tabelę 1 — 11 technik manipulacji wykrywanych przez system (tag + polski opis)
-- Poprawiono formatowanie list (z numerowanych na punktowane) i literówkę
+Wygenerowano: 2026-05-23 17:46 +02:00
 
-Sekcja 2 — Kluczowe zagadnienia
-- Usunięto tekst instrukcji szablonu z wprowadzenia do sekcji
-- Dodano polskie tłumaczenia terminów w nagłówkach i treści podsekcji (2.2–2.8): Nauczyciel-Uczeń, pętla ponawiania, logika wznawiania, ścisłe generowanie, pętla douczania, wyzwalanie i douczanie, dynamiczne ładowanie adapterów, dynamiczna wymiana modelu (Hot-Swap), weryfikacja koncepcji, destylacja wiedzy
-- DODANO sekcję 2.9 — Instrukcja instalacji i uruchomienia systemu (wymagania, setup.cmd, WSL2, kolejność startu usług, link do modelu)
-- DODANO akapit o dwuwarstwowym modelu danych (SQLite + system plików) w sekcji 2.6
-- DODANO zdanie o świadomej rezygnacji z pełnej automatyzacji wdrożeń (sekcja 2.6)
-- DODANO uwagę metodologiczną o różnicy metryk F1 względem literatury (sekcja 2.8)
-- Renumeracja tabeli wyników: Tabela 1 → Tabela 2
+Zakres
+------
+- documentation/Projekt_43995.docx
+- documentation/Projekt_43995.pptx
+- documentation/skrypt_prezentacji.md
+- .gitignore
 
-Sekcja 3 — Zrzuty ekranu
-- Usunięto tekst instrukcji szablonu i ograniczenie strony z tytułu
-- Zaktualizowano podpisy obrazów (m.in. dodano diagramy architektury wnioskowania i MLOps)
-- Usunięto nadmiarowe zrzuty ekranu
-
-Sekcja 4 — Wnioski
-- Usunięto tekst instrukcji szablonu i ograniczenie strony z tytułu
-- Dodano polskie tłumaczenia terminów (LLM-as-a-Judge, Bias Mitigation, Proof-of-Concept)
-
-Sekcja 5 — Bibliografia
-- Usunięto wstępne zdanie o charakterze dokumentu
+Zmiany
+------
+- Zaktualizowano tresc pracy, usuwajac sprzeczny wynik F1 dla adaptera prototypowego i pozostawiajac wynik koncowy: Prototype Adapter F1 = 0.4912 dla N = 1521.
+- Rozszerzono podpisy i krotkie interpretacje macierzy pomylek, zrzutow interfejsu, widokow panelu eksperckiego oraz diagramow architektury.
+- Poprawiono jezyk pracy przez zastosowanie polsko-pierwszych terminow technicznych, bardziej akademickiego stylu oraz dodanie pozycji bibliograficznej dotyczacej wyjasnialnego NLP.
+- Przebudowano prezentacje obrony do czytelniejszej kolejnosci: motywacja, cel, architektura, przyklad dzialania, technologie, niezawodnosc, wyniki i podsumowanie.
+- Dodano slajd z przykladem dzialania systemu oraz zlagodzono sformulowania dotyczace porownania wynikow z literatura.
+- Dostosowano skrypt prezentacji do nowego ukladu slajdow, ograniczono zargon, wyjasniono dwa tryby pracy systemu i wzmocniono zakonczenie.
+- Dodano `_thesis_build` do `.gitignore`, aby wygenerowane artefakty budowania pracy nie trafialy do repozytorium.

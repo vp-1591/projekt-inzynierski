@@ -40,6 +40,7 @@ backend/tests/pytest-cache-files-*/
 .venv-wsl/
 /unsloth_compiled_cache
 .claude/
+_thesis_build
 
 /backend/unsloth_compiled_cache
 /backend/model/latest/
