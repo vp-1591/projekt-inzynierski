@@ -20,3 +20,6 @@ changes included in the commit.
 For every change, append an entry to `feat.log` using this format:
 
 `[timestamp | change(fix, feat, etc) | reasoning]`
+
+Never stage or commit `feat.log`. Keep it curated locally and leave it
+untracked.
