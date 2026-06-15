@@ -8,9 +8,7 @@
 
 Dzień dobry. Nazywam się Vadym Abrosimov i chciałbym przedstawić projekt inżynierski „System detekcji manipulacji”.
 
-Pełny temat pracy to „System detekcji dezinformacji z wyjaśnialną sztuczną inteligencją”, natomiast w prezentacji używam krótszego określenia „System detekcji manipulacji”, ponieważ system operacyjnie wykrywa konkretne techniki manipulacyjne występujące w treściach dezinformacyjnych.
-
-Celem pracy było stworzenie lokalnego systemu wykrywania manipulacji medialnych, który nie tylko klasyfikuje tekst, ale także uzasadnia decyzję i może być iteracyjnie douczany.
+Celem pracy było stworzenie lokalnego systemu wykrywania manipulacji medialnych, który nie tylko ocenia tekst, ale także wyjaśnia swoją decyzję i może być rozwijany na nowych przykładach.
 
 ---
 
@@ -18,13 +16,13 @@ Celem pracy było stworzenie lokalnego systemu wykrywania manipulacji medialnych
 
 Problem dezinformacji polega nie tylko na tym, że treści manipulacyjne są trudne do wykrycia, ale również na tym, że sama etykieta „manipulacja” często nie wystarcza.
 
-Klasyczne modele klasyfikacyjne, takie jak rozwiązania oparte na BERT, zwykle zwracają wynik liczbowy albo etykietę, ale nie wyjaśniają, dlaczego dana decyzja została podjęta.
+Typowe narzędzia do oceniania tekstu zwykle zwracają wynik liczbowy albo krótką etykietę, ale nie wyjaśniają, dlaczego podjęły taką decyzję.
 
-Modele chmurowe, na przykład GPT-4, mają z kolei ograniczenia moderacji treści i mechanizmy bezpieczeństwa, a dodatkowo wiążą się z kosztami API oraz ryzykiem przekazywania danych poza lokalne środowisko.
+Rozwiązania działające w chmurze, na przykład GPT-4, mają z kolei własne ograniczenia bezpieczeństwa, generują koszty użycia i wymagają wysyłania danych poza komputer użytkownika.
 
-Ręczny fact-checking jest bardzo dokładny, ale trudno go skalować, ponieważ analiza jednego artykułu może wymagać wielu godzin pracy eksperta.
+Ręczne sprawdzanie faktów jest bardzo dokładne, ale trudno robić je na dużą skalę, ponieważ analiza jednego artykułu może wymagać wielu godzin pracy eksperta.
 
-Dlatego w pracy skupiłem się na luce pomiędzy tymi podejściami: lokalnym systemie, który wykrywa techniki manipulacji, pokazuje uzasadnienie i może być dostosowywany do nowych przykładów.
+Dlatego w pracy skupiłem się na rozwiązaniu pośrednim: lokalnym systemie, który wykrywa techniki manipulacji, pokazuje uzasadnienie i może być dostosowywany do nowych przykładów.
 
 ---
 
@@ -32,25 +30,25 @@ Dlatego w pracy skupiłem się na luce pomiędzy tymi podejściami: lokalnym sys
 
 Projekt realizuje trzy główne cele.
 
-Po pierwsze, system ma wykrywać techniki manipulacji w polskojęzycznych tekstach. Chodzi nie tylko o stwierdzenie, czy tekst jest problematyczny, ale o wskazanie konkretnego typu manipulacji.
+Po pierwsze, system ma wykrywać techniki manipulacji w polskojęzycznych tekstach. Chodzi nie tylko o stwierdzenie, czy tekst jest problematyczny, ale o wskazanie, na czym polega problem.
 
-Po drugie, system ma generować wyjaśnialne uzasadnienia. Użytkownik powinien zobaczyć, co w tekście wpłynęło na decyzję modelu, a nie tylko końcową etykietę.
+Po drugie, system ma podawać zrozumiałe uzasadnienia. Użytkownik powinien zobaczyć, co w tekście wpłynęło na decyzję, a nie tylko końcowy wynik.
 
-Po trzecie, system ma umożliwiać douczanie. Ekspert może dodać nowe przykłady, a model może zostać ponownie dostrojony, gdy pojawiają się nowe typy narracji lub manipulacji.
+Po trzecie, system ma umożliwiać adaptacje. Ekspert może dodać nowe przykłady, a system może zostać zaktualizowany, gdy pojawiają się nowe sposoby manipulacji.
 
 ---
 
 ## Slajd 4 — Architektura
 
-Architektura systemu składa się z dwóch trybów: analizy tekstu oraz douczania eksperckiego.
+System działa w dwóch trybach: analizy tekstu oraz uczenia na przykładach przygotowanych przez eksperta.
 
-Pierwszy tryb to normalna praca systemu. Użytkownik wkleja tekst artykułu w aplikacji, a system przekazuje go do lokalnego modelu językowego. Model analizuje treść i zwraca wynik w dwóch częściach: wykryte techniki manipulacji oraz krótkie uzasadnienie decyzji.
+Pierwszy tryb to normalna praca systemu. Użytkownik wkleja tekst artykułu w aplikacji, a system analizuje go lokalnie na komputerze. Wynik składa się z dwóch części: wykrytych technik manipulacji oraz krótkiego uzasadnienia decyzji.
 
-Po stronie aplikacji wynik nie jest pokazywany bezpośrednio w surowej postaci. Backend sprawdza, czy odpowiedź ma poprawną strukturę, porządkuje etykiety i dopiero wtedy przekazuje wynik do interfejsu użytkownika.
+Po stronie aplikacji wynik nie jest pokazywany od razu w surowej postaci. Część serwerowa sprawdza, czy odpowiedź jest poprawnie zapisana, porządkuje nazwy wykrytych technik i dopiero wtedy pokazuje wynik użytkownikowi.
 
-Drugi tryb dotyczy rozwoju systemu. Ekspert może dostarczyć nowe, opisane przykłady manipulacji, a następnie uruchomić douczanie modelu. Po zakończeniu system wykonuje ewaluację, czyli sprawdza, czy nowa wersja rzeczywiście działa lepiej.
+Drugi tryb dotyczy rozwoju systemu. Ekspert może dostarczyć nowe, opisane przykłady manipulacji, a następnie uruchomić dodatkowe uczenie. Po zakończeniu system sprawdza, czy nowa wersja rzeczywiście działa lepiej.
 
-Wdrożenie nowej wersji nie jest automatyczne. Ekspert widzi wynik oceny i dopiero na tej podstawie decyduje, czy nowy adapter ma zastąpić poprzednią wersję.
+Wdrożenie nowej wersji nie jest automatyczne. Ekspert widzi wynik oceny i dopiero na tej podstawie decyduje, czy zastąpić poprzednią wersję.
 
 Najważniejsze jest to, że oba przepływy działają lokalnie i nie wymagają wysyłania analizowanych treści do zewnętrznych usług.
 
@@ -60,64 +58,53 @@ Najważniejsze jest to, że oba przepływy działają lokalnie i nie wymagają w
 
 Na tym slajdzie pokazuję prosty przykład działania aplikacji.
 
-Na wejściu system otrzymuje fragment tekstu artykułu. Następnie model analizuje treść i wskazuje wykrytą technikę manipulacji — w tym przykładzie jest to wybiórczość, czyli cherry picking.
+Na wejściu system otrzymuje fragment tekstu artykułu. Następnie analizuje treść i wskazuje wykrytą technikę manipulacji. W tym przykładzie jest to wybiórczość, czyli pokazywanie tylko tych faktów, które pasują do danej tezy.
 
-System nie kończy jednak na samej etykiecie. Pod spodem generuje krótkie uzasadnienie, które wyjaśnia, dlaczego dany fragment został zaklasyfikowany w ten sposób.
+System nie kończy jednak na samej nazwie techniki. Pod spodem pokazuje krótkie uzasadnienie, które wyjaśnia, dlaczego dany fragment został oceniony w ten sposób.
 
-To jest istotna różnica względem typowego klasyfikatora: użytkownik może ocenić nie tylko wynik, ale również logikę stojącą za decyzją modelu.
+To jest istotna różnica względem prostego narzędzia, które zwraca tylko wynik: użytkownik może ocenić nie tylko decyzję, ale również jej uzasadnienie.
 
 ---
 
 ## Slajd 6 — Stos technologiczny
 
-Najważniejszym elementem jest lokalny model językowy Bielik, wybrany ze względu na obsługę języka polskiego i możliwość uruchomienia na sprzęcie konsumenckim.
+Najważniejszym elementem jest lokalny model językowy Bielik, wybrany ze względu na dobrą obsługę języka polskiego i możliwość uruchomienia na zwykłym komputerze z odpowiednią kartą graficzną.
 
-Douczanie zrealizowałem w sposób oszczędny obliczeniowo: zamiast trenować cały model od zera, system uczy niewielki adapter. Dzięki temu eksperymenty były możliwe bez drogiej infrastruktury serwerowej.
+Dalsze uczenie zrealizowałem w sposób oszczędny: zamiast uczyć cały model od zera, system uczy tylko niewielki dodatkowy element. Dzięki temu eksperymenty były możliwe bez drogiej infrastruktury serwerowej.
 
-Do uruchamiania modelu lokalnie wykorzystałem Ollama i llama.cpp. Sama aplikacja składa się z części serwerowej, interfejsu użytkownika oraz prostej bazy danych do zapisywania historii treningów i eksperymentów.
+Do uruchamiania modelu lokalnie wykorzystałem Ollama i llama.cpp. Sama aplikacja składa się z części serwerowej, widoku dla użytkownika oraz prostej bazy danych do zapisywania historii uczenia i eksperymentów.
 
-Najważniejsze z perspektywy pracy nie są jednak same nazwy bibliotek, ale efekt: cały przepływ analizy i douczania może działać lokalnie.
+Najważniejsze z perspektywy pracy nie są jednak same nazwy bibliotek, ale efekt: analiza tekstu i dalsze uczenie mogą działać lokalnie.
 
 ---
 
 ## Slajd 7 — Niezawodność
 
-Jednym z praktycznych problemów było to, że model językowy generuje tekst, a aplikacja potrzebuje uporządkowanych danych.
+Jednym z praktycznych problemów było to, że model językowy odpowiada tekstem, a aplikacja potrzebuje danych zapisanych w przewidywalny sposób. Model może więc odpowiedzieć sensownie, ale w formie, której aplikacja nie potrafiłaby od razu odczytać.
 
-Model może więc odpowiedzieć sensownie, ale w formacie, którego aplikacja nie potrafiłaby od razu odczytać.
-
-Dlatego dodałem warstwę sprawdzającą odpowiedź modelu. Jeśli format jest niepoprawny, system próbuje go automatycznie naprawić i ujednolicić nazwy etykiet.
-
-Efektem jest wskaźnik poprawnej struktury powyżej 96%. Ten slajd pokazuje więc nie tyle detal implementacyjny, ile mechanizm, który pozwala używać modelu w stabilnej aplikacji.
-
+Dlatego dodałem warstwę sprawdzającą i naprawiaca odpowiedź modelu. Efektem jest poprawny zapis odpowiedzi w ponad 96% przypadków. 
 ---
 
 ## Slajd 8 — Wyniki
 
-Ewaluację przeprowadziłem na zbiorze testowym liczącym 1521 próbek.
+Skuteczność sprawdziłem na zbiorze testowym liczącym 1521 próbek.
 
-Model bazowy bez dostrojenia osiągał słabe wyniki. To pokazuje, że samo użycie modelu językowego nie wystarcza do tego zadania.
+Model bazowy, czyli wersja bez dodatkowego uczenia, osiągał słabe wyniki. Po dodaniu przykładów skuteczność wzrosła do F1 równego 0,49. Jest to miara, która łączy trafność wykrywania z liczbą pomyłek.
 
-Po douczeniu wynik wzrósł do F1 równego 0,49, przy wysokiej poprawności struktury odpowiedzi.
+Ten wynik należy porównywać ostrożnie, bo inne prace często używają trochę innych danych i zasad oceny. Można jednak powiedzieć, że rezultat jest konkurencyjny, zwłaszcza jak na lokalny model tej wielkości.
 
-Wynik należy interpretować ostrożnie, ponieważ porównania z literaturą nie zawsze są w pełni równoważne metodologicznie. Można jednak powiedzieć, że uzyskane rezultaty są konkurencyjne wobec raportowanych wyników, zwłaszcza biorąc pod uwagę lokalny model 4,5B.
-
-Wariant generujący uzasadnienia osiągnął niższy wynik. Jest to koszt wyjaśnialności: model wykonuje trudniejsze zadanie, bo musi jednocześnie wskazać technikę i wyjaśnić swoją decyzję.
+Wariant generujący uzasadnienia osiągnął niższy wynik. To pokazuje koszt wyjaśniania decyzji: system wykonuje trudniejsze zadanie, bo musi jednocześnie wskazać technikę i wyjaśnić, dlaczego ją wybrał.
 
 ---
 
 ## Slajd 9 — Podsumowanie
 
-Podsumowując, w ramach pracy powstał kompletny system: od lokalnej inferencji, przez douczanie, po ewaluację i kontrolowane wdrożenie adaptera.
+Podsumowując, w ramach pracy powstał działający system, który lokalnie analizuje polskie teksty, wskazuje możliwe manipulacje i pokazuje powód swojej decyzji.
 
-Najważniejsze cechy projektu to lokalne działanie, prywatność danych, wyjaśnialność decyzji oraz możliwość adaptacji systemu do nowych przykładów.
+Najważniejsze jest dla mnie to, że użytkownik nie dostaje tylko odpowiedzi „tak” albo „nie”. Dostaje też krótkie wyjaśnienie, a ekspert może później rozwijać system na nowych przykładach.
 
-Główne kierunki dalszego rozwoju to użycie większych modeli na mocniejszym GPU, automatyczna ocena jakości uzasadnień oraz rozbudowa mechanizmów bezpieczeństwa aplikacji.
-
-Projekt potwierdził możliwość implementacji lokalnego systemu XAI opartego na LLM z pełnym cyklem MLOps na sprzęcie klasy konsumenckiej.
+W dalszej pracy skupiłbym się przede wszystkim na lepszej ocenie jakości uzasadnień, testach na większych zbiorach oraz dodatkowym zabezpieczeniu aplikacji.
 
 Dziękuję za uwagę. Chętnie odpowiem na pytania.
 
 ---
-
-_Łączny czas: ~6 minut przy tempie około 130 słów/minutę_
