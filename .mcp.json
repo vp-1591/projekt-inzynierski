@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "pptx": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "-m",
+        "pptx_mcp_server.server"
+      ],
+      "env": {}
+    }
+  }
+}
