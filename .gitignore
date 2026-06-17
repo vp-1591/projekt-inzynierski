@@ -63,6 +63,10 @@ section-*.txt
 *.zip
 _thesis_build
 
+# Ukrainian thesis (contains signatures)
+documentation/ua/2026_Б_ШІ_ІТШІз-22-1_Абросімов_В_П_записка.pdf
+documentation/ua/2026_Б_ШІ_ІТШІз-22-1_Абросімов_В_П_записка.docx
+
 # Fonts
 *.ttf
 Inter,Platypi,Source_Serif_4/
