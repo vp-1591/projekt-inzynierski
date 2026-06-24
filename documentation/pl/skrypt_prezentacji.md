@@ -74,8 +74,6 @@ Dalsze uczenie zrealizowałem w sposób oszczędny: zamiast uczyć cały model o
 
 Do uruchamiania modelu lokalnie wykorzystałem Ollama i llama.cpp. Sama aplikacja składa się z części serwerowej, widoku dla użytkownika oraz prostej bazy danych do zapisywania historii uczenia i eksperymentów.
 
-Najważniejsze z perspektywy pracy nie są jednak same nazwy bibliotek, ale efekt: analiza tekstu i dalsze uczenie mogą działać lokalnie.
-
 ---
 
 ## Slajd 7 — Niezawodność
@@ -83,6 +81,7 @@ Najważniejsze z perspektywy pracy nie są jednak same nazwy bibliotek, ale efek
 Jednym z praktycznych problemów było to, że model językowy odpowiada tekstem, a aplikacja potrzebuje danych zapisanych w przewidywalny sposób. Model może więc odpowiedzieć sensownie, ale w formie, której aplikacja nie potrafiłaby od razu odczytać.
 
 Dlatego dodałem warstwę sprawdzającą i naprawiaca odpowiedź modelu. Efektem jest poprawny zapis odpowiedzi w ponad 96% przypadków. 
+
 ---
 
 ## Slajd 8 — Wyniki
@@ -93,7 +92,7 @@ Model bazowy, czyli wersja bez dodatkowego uczenia, osiągał słabe wyniki. Po 
 
 Ten wynik należy porównywać ostrożnie, bo inne prace często używają trochę innych danych i zasad oceny. Można jednak powiedzieć, że rezultat jest konkurencyjny, zwłaszcza jak na lokalny model tej wielkości.
 
-Wariant generujący uzasadnienia osiągnął niższy wynik. To pokazuje koszt wyjaśniania decyzji: system wykonuje trudniejsze zadanie, bo musi jednocześnie wskazać technikę i wyjaśnić, dlaczego ją wybrał.
+Wariant generujący uzasadnienia osiągnął niższy wynik. To pokazuje koszt wyjaśniania decyzji: system wykonuje trudniejsze zadanie, bo musi jednocześnie wskazać technikę i wyjaśnić, dlaczego ją wybrał. Dodatknie, potencjalnie nieprecyzyjne rozumowanie (CoT) w danych syntetycznych mogło wpłynąć na jakość etykiet, co przekłada się na metryki modelu adaptera.
 
 ---
 
@@ -103,7 +102,7 @@ Podsumowując, w ramach pracy powstał działający system, który lokalnie anal
 
 Najważniejsze jest dla mnie to, że użytkownik nie dostaje tylko odpowiedzi „tak” albo „nie”. Dostaje też krótkie wyjaśnienie, a ekspert może później rozwijać system na nowych przykładach.
 
-W dalszej pracy skupiłbym się przede wszystkim na lepszej ocenie jakości uzasadnień, testach na większych zbiorach oraz dodatkowym zabezpieczeniu aplikacji.
+W dalszej pracy skupiłbym się na mocniejszym GPU do trenowania adapterow do większych modeli, mechanizmie LLM-as-a-judge do weryfikacji spójności CoT z etykietami, rozdzieleniu interfejsu eksperta od użytkownika oraz konteneryzacji z Dockerem dla lepszej przenoszalności.
 
 Dziękuję za uwagę. Chętnie odpowiem na pytania.
 
