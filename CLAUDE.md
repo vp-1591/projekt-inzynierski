@@ -72,43 +72,4 @@ The entire UI and system prompts are in Polish. Technique names displayed to use
 
 Do not add "Co-Authored-By: Claude ..." or any AI attribution lines to commit messages.
 
-## Architecture Decision Records (ADRs)
-
-Before making any non-trivial code change, create or update an ADR in the `docs/adr/` directory.
-
-### File naming
-
-`NNNN-short-kebab-case-title.md` — pad the number to 4 digits (e.g. `0001-use-event-sourcing.md`).
-
-### Required ADR structure
-
-```
-# NNNN: Title
-
-## Status
-Proposed | Accepted | Deprecated | Superseded by [NNNN]
-
-## Context
-What problem or situation prompted this decision?
-
-## Decision
-What was decided and why?
-
-## Consequences
-What are the trade-offs, risks, or follow-up actions?
-```
-
-### When to write an ADR
-
-- Introducing or removing a dependency
-- Changing an architectural pattern or data flow
-- Any edit touching more than one module/layer
-- Reversing or overriding a previous decision
-
-### Inline reasoning for small edits
-
-For single-file edits too small for a full ADR, add a comment directly above the changed block:
-
-```
-# REASON: <why this change was made>
-```
+@~/.claude/shared/adr-workflow.md
