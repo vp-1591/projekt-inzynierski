@@ -8,9 +8,9 @@ Polish-language disinformation detection system using Explainable AI (XAI). Iden
 
 ## Commands
 
-**Start all services (Windows):** `./run_app.cmd` — launches Ollama, backend, and frontend in separate windows.
+**Start all services (Docker):** `docker compose up` — launches Ollama, backend, and frontend in containers. See [DOCKER.md](DOCKER.md) for details.
 
-**Manual start:**
+**Manual start (without Docker):**
 
 - Backend: `cd backend && python -m app.main` (FastAPI on :8000)
 - Frontend: `cd frontend && npm run dev` (Vite on :5173)
@@ -27,7 +27,8 @@ Polish-language disinformation detection system using Explainable AI (XAI). Iden
 
 **Ollama model setup:**
 
-- `ollama create bielik-4.5b -f ./model/Modelfile`
+- **Docker:** The Ollama container auto-creates `bielik-lora-mipd` on first start using `model/Modelfile.docker`.
+- **Manual:** `ollama create bielik-lora-mipd -f ./model/Modelfile`
 - The model name used at runtime is `bielik-lora-mipd:latest` (hardcoded in `backend/app/main.py`)
 
 ## Architecture

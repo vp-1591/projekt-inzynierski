@@ -24,6 +24,6 @@ COPY . .
 
 EXPOSE 8000
 
-# --ws websockets is required for WebSocket support (matches run_app.cmd)
+# --ws websockets is required for WebSocket support (previously in run_app.cmd, now removed)
 # --reload removed for production; add back for dev: CMD ["sh", "-c", "... --reload"]
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--ws", "websockets"]

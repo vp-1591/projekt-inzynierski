@@ -4,11 +4,10 @@ System do wykrywania 11 technik manipulacji w tekstach medialnych w języku pols
 
 ## Wymagania
 
-- **OS**: Windows 10/11 z [WSL2](https://learn.microsoft.com/pl-pl/windows/wsl/install) (Ubuntu) — trening wymaga środowiska Linux
+- **Docker Desktop** z WSL2 backend (Windows) lub Docker Engine (Linux)
 - **GPU**: NVIDIA z min. 8 GB VRAM (dla treningu 4-bit)
-- **Ollama**: [ollama.com](https://ollama.com)
-- **Python 3.11+**: [python.org/downloads](https://www.python.org/downloads/)
-- **Node.js 18+**: [nodejs.org](https://nodejs.org/)
+- **NVIDIA Container Toolkit** — [instrukcja instalacji](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
+- Do uruchomienia bez Dockera: Python 3.11+, Node.js 18+, Ollama
 
 ## Instalacja
 
@@ -16,6 +15,7 @@ System do wykrywania 11 technik manipulacji w tekstach medialnych w języku pols
 
 ```bash
 git clone <repo-url>
+git submodule update --init --recursive
 ```
 
 ### 2. Pliki modelu (~7.7 GB)
@@ -42,34 +42,28 @@ model/
 │   ├── mipd_test.jsonl                           (~8.5 MB)
 │   └── mipd_val.jsonl                            (~18 MB)
 ├── benchmark-reports/   (już w repozytorium)
-└── Modelfile            (już w repozytorium)
+├── Modelfile            (już w repozytorium)
+└── Modelfile.docker     (już w repozytorium)
 ```
 
-### 3. Automatyczna konfiguracja
-
-Uruchom `setup.cmd` — skrypt:
-
-1. Sprawdza wymagania (Python, npm, Ollama)
-2. Inicjalizuje submoduły git (`llama.cpp`)
-3. Tworzy środowisko wirtualne Python i instaluje zależności
-4. Instaluje zależności frontend (npm)
-5. Konfiguruje środowisko treningowe WSL2 (`.venv-wsl` + `requirements-wsl.txt`)
-6. Rozwiązuje ścieżkę ADAPTER w `Modelfile` i rejestruje model w Ollama (pomija jeśli istnieje)
-
-```cmd
-setup.cmd
-```
-
-Wymagane: Ollama musi być uruchomiona przed `setup.cmd`.
-
-### 4. Ręczna konfiguracja (alternatywa)
-
-Jeśli wolisz konfigurować ręcznie:
+### 3. Uruchomienie przez Docker (zalecane)
 
 ```bash
-# Submoduły git
-git submodule update --init --recursive
+docker compose up
+```
 
+To uruchamia trzy serwisy:
+- **Ollama** na porcie :11435 — automatycznie tworzy model `bielik-lora-mipd` przy pierwszym starcie
+- **Backend API** na porcie :8000 (dokumentacja Swagger: `/docs`)
+- **Frontend** na porcie :5173
+
+Szczegóły w [DOCKER.md](DOCKER.md).
+
+### 4. Ręczna konfiguracja (alternatywa, bez Dockera)
+
+Jeśli wolisz uruchomić bez Dockera:
+
+```bash
 # Backend
 python -m venv backend/.venv
 backend/.venv/Scripts/activate && pip install -r backend/requirements.txt
@@ -87,7 +81,7 @@ ollama create bielik-lora-mipd -f model/Modelfile
 
 ### 5. Środowisko treningowe (WSL2)
 
-`setup.cmd` sprawdza automatycznie, czy WSL ma `python3` i `python3-venv`, i tworzy `.venv-wsl` z zależnościami z `backend/requirements-wsl.txt`. Jeśli instalacja nie powiedzie się, w terminalu Ubuntu:
+W Docker trening działa wewnątrz kontenera backend z GPU. Poza Dockerem wymaga WSL2:
 
 ```bash
 sudo apt update && sudo apt install -y python3 python3-venv python3-pip
@@ -107,31 +101,38 @@ Trening jest uruchamiany przez Panel Ekspercki w UI, nie z CLI.
 wsl bash -lc "cd /mnt/d/Documents/Vadym/GitRep/projekt-inzynierski/backend && rm -rf .venv-wsl"
 ```
 
-Następnie ponownie uruchom `setup.cmd` lub utwórz venv ręcznie (patrz sekcja wyżej).
+Następnie utwórz venv ręcznie (patrz sekcja wyżej).
 
 ## Uruchomienie
 
-```cmd
-run_app.cmd
+```bash
+docker compose up
 ```
 
-Uruchamia Ollama, backend (FastAPI :8000) i frontend (Vite :5173).
+Uruchamia Ollama (:11435), backend (FastAPI :8000) i frontend (Vite :5173) w kontenerach.
 
 ## Cykl MLOps
 
 1. **Analiza** — wpisz tekst, zobacz wykryte techniki manipulacji
 2. **Tryb Ekspercki** — przełącznik w prawym górnym rogu
-3. **Trening** — prześlij plik `.jsonl`, system uruchamia SFT w WSL2, postęp w czasie rzeczywistym
+3. **Trening** — prześlij plik `.jsonl`, system uruchamia SFT, postęp w czasie rzeczywistym
 4. **Ewaluacja** — automatyczny benchmark na `mipd_test.jsonl`
 5. **Hot-swap** — zatwierdź nowy model, Ollama aktualizuje się bez restartu
 
 ## Reset do stanu początkowego
 
-```cmd
-reset_state.cmd
-```
+Aby przywrócić adapter `xai-adapter` jako aktywny model i usunąć artefakty treningowe:
 
-Przywraca adapter `xai-adapter` jako aktywny model, resetuje raport benchmark i usuwa artefakty treningowe.
+```bash
+# Zatrzymaj kontenery
+docker compose down
+
+# Usuń wolumeny z logami i uploadami
+docker compose down -v
+
+# Zrestartuj — model zostanie odtworzony z xai-adapter
+docker compose up
+```
 
 ## Architektura
 
