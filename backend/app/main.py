@@ -1,13 +1,14 @@
-from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-import httpx
 import json
 import os
+
+import httpx
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
 from .db import database
 from .llm_processor import normalize_llm_response
-from pydantic import BaseModel
-from typing import Any
 
 app = FastAPI(title="Disinformation Detector Backend")
 
@@ -38,7 +39,6 @@ class ConnectionManager:
             self.active_connections.remove(websocket)
 
     async def broadcast(self, message: dict):
-        import asyncio
         dead_connections = []
         for connection in self.active_connections:
             try:
@@ -129,8 +129,8 @@ async def upload_training_data(
     orchestrator: MLOpsOrchestrator = Depends(get_orchestrator)
 ):
     """Uploads a training file and triggers the manual training process."""
-    import shutil
     import os
+    import shutil
     
     upload_dir = "uploads"
     os.makedirs(upload_dir, exist_ok=True)

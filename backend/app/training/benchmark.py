@@ -1,15 +1,16 @@
 import argparse
+import contextlib
 import json
 import os
-import random
 import re
-import sys
 import time
+
 import requests
 import torch
-from datasets import load_dataset, Dataset
-from unsloth import FastLanguageModel
+from datasets import load_dataset
 from tqdm import tqdm
+from unsloth import FastLanguageModel
+
 
 def evaluate_response(response_text: str, ground_truth_tags: list):
     """
@@ -124,11 +125,10 @@ Musisz odpowiedzieć pojedynczym, poprawnym obiektem JSON zawierającym dwa kluc
 
 def report_progress(url, value):
     """Reports evaluation progress to the backend."""
-    try:
+    with contextlib.suppress(BaseException):
         requests.post(f"{url}/training/progress", 
                       json={"stage": "evaluation", "value": value}, 
                       timeout=1)
-    except: pass
 
 def main():
     parser = argparse.ArgumentParser()

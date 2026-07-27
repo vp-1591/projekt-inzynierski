@@ -1,5 +1,6 @@
-import re
+import contextlib
 import json
+import re
 
 VALID_TAGS = {
     'REFERENCE_ERROR', 'WHATABOUTISM', 'STRAWMAN', 'EMOTIONAL_CONTENT', 
@@ -16,10 +17,8 @@ def normalize_llm_response(content: str) -> dict:
     """
     # Try initial JSON parse
     parsed_content = None
-    try:
+    with contextlib.suppress(json.JSONDecodeError, TypeError):
         parsed_content = json.loads(content)
-    except (json.JSONDecodeError, TypeError):
-        pass
 
     # --- PHASE 1: RESPONSE HEALING (Regex Recovery) ---
     if not isinstance(parsed_content, dict):
@@ -39,7 +38,7 @@ def normalize_llm_response(content: str) -> dict:
 
     # --- PHASE 2: SCHEMA NORMALIZATION (Fuzzy Keys) ---
     if "reasoning" not in parsed_content:
-        for k in parsed_content.keys():
+        for k in parsed_content:
             if k.startswith("reason"):
                 parsed_content["reasoning"] = parsed_content[k]
                 break
@@ -47,7 +46,7 @@ def normalize_llm_response(content: str) -> dict:
              parsed_content["reasoning"] = "Brak uzasadnienia."
 
     if "discovered_techniques" not in parsed_content:
-        for k in parsed_content.keys():
+        for k in parsed_content:
             if "technique" in k or "discovered" in k:
                  parsed_content["discovered_techniques"] = parsed_content[k]
                  break

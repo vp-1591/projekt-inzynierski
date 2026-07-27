@@ -1,17 +1,18 @@
 import os
+
 os.environ["UNSLOTH_DISABLE_STATISTICS"] = "1"
 os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
 import sys
-import torch
-from unsloth import FastLanguageModel
-from trl import SFTTrainer, SFTConfig
-from datasets import load_dataset
-from unsloth.chat_templates import get_chat_template, train_on_responses_only
 
 import requests
+import torch
+from datasets import load_dataset
 from transformers import TrainerCallback
+from trl import SFTConfig, SFTTrainer
+from unsloth import FastLanguageModel
+
 
 class ProgressCallback(TrainerCallback):
     """Callback to report training progress back to the backend API."""
@@ -40,8 +41,8 @@ class ModelTrainer:
         Executes Supervised Fine-Tuning (SFT). 
         Optimized for 4-bit quantization and gradient checkpointing to save VRAM.
         """
-        import sys
         import subprocess
+        import sys
 
         # Check GPU memory status
         try:
@@ -83,7 +84,7 @@ class ModelTrainer:
         def formatting_prompts_func(examples):
             """Prepares conversations for the chat template with truncation support."""
             texts = []
-            for input_text, output_text in zip(examples["input"], examples["output"]):
+            for input_text, output_text in zip(examples["input"], examples["output"], strict=False):
                 # Truncate input to avoid OOM on extremely long articles
                 truncated_input = input_text[:3500] if len(input_text) > 3500 else input_text
                 

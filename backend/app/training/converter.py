@@ -1,8 +1,8 @@
-import os
-import sys
 import json
+import os
 import shutil
 import subprocess
+import sys
 import tempfile
 
 
@@ -19,7 +19,7 @@ def _strip_bnb_config(base_dir):
     if not os.path.exists(config_path):
         return base_dir
 
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(config_path, encoding="utf-8") as f:
         config = json.load(f)
 
     if "quantization_config" not in config:

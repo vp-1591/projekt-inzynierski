@@ -1,14 +1,15 @@
 import json
 import re
+
 from sklearn.metrics import f1_score
-from typing import List, Dict
+
 
 class AutoBenchmarker:
     """Utility class for automated evaluation of LLM response parsing and classification accuracy."""
-    def __init__(self, technique_mapping: Dict):
+    def __init__(self, technique_mapping: dict):
         self.technique_mapping = technique_mapping
 
-    def evaluate_response(self, response_text: str, ground_truth_tags: List[str]) -> Dict:
+    def evaluate_response(self, response_text: str, ground_truth_tags: list[str]) -> dict:
         """
         Evaluates a single LLM response, calculating Parsing Success Rate (PSR) and F1 Score.
         """
@@ -45,7 +46,7 @@ class AutoBenchmarker:
             "ground_truth": ground_truth_tags
         }
 
-    def calculate_f1(self, predicted: List[str], actual: List[str]) -> float:
+    def calculate_f1(self, predicted: list[str], actual: list[str]) -> float:
         """Calculates Macro F1 score between predicted and actual tags."""
         predicted = [str(t) for t in predicted]
         actual = [str(t) for t in actual]

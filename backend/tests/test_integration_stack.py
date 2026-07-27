@@ -13,7 +13,6 @@ from app import main
 from app.training import orchestrator as orchestrator_module
 from app.training.orchestrator import MLOpsOrchestrator
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = PROJECT_ROOT / "backend"
 
@@ -151,7 +150,7 @@ def test_training_upload_launches_direct_python_invocation(
             captured["cmd"] = cmd
             captured["kwargs"] = kwargs
             # Should NOT have shell=True
-            assert kwargs.get("shell") != True
+            assert not kwargs.get("shell")
 
     orchestrator = MLOpsOrchestrator(DummyDB())
     monkeypatch.chdir(BACKEND_ROOT)
@@ -205,4 +204,4 @@ def test_training_command_uses_direct_python_invocation():
     assert isinstance(captured["cmd"], list)
     assert "app.training.trainer" in captured["cmd"]
     assert "wsl" not in captured["cmd"]
-    assert captured["shell"] == False  # Should NOT use shell
+    assert not captured["shell"]  # Should NOT use shell

@@ -1,9 +1,9 @@
-from sqlalchemy import Column, Integer, String, JSON, Float, DateTime, Boolean
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine
 import datetime
 from pathlib import Path
+
+from sqlalchemy import Column, DateTime, Float, Integer, String, create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 DATABASE_PATH = BACKEND_DIR / "disinfo_system.db"

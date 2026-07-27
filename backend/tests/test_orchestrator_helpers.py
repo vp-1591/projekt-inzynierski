@@ -1,7 +1,7 @@
 from unittest.mock import mock_open, patch
 
 from app.training import orchestrator as orchestrator_module
-from app.training.orchestrator import MLOpsOrchestrator, BACKEND_URL
+from app.training.orchestrator import MLOpsOrchestrator
 
 
 class DummyDB:

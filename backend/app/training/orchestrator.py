@@ -1,13 +1,13 @@
+import asyncio
 import os
 import re
-import sys
 import subprocess
-import asyncio
-import httpx
+import sys
 from datetime import datetime
-from sqlalchemy.orm import Session
-from ..db import database
 
+from sqlalchemy.orm import Session
+
+from ..db import database
 
 # Docker networking: service hostnames resolved via docker-compose DNS
 BACKEND_HOST = os.getenv("BACKEND_HOST", "backend")
@@ -85,7 +85,7 @@ class MLOpsOrchestrator:
         result = {'f1': 0.0, 'em': 0.0}
         try:
             report_path = os.path.join(_project_root(), "model", "benchmark-reports", "current_baseline_report.txt")
-            with open(report_path, "r", encoding="utf-8") as f:
+            with open(report_path, encoding="utf-8") as f:
                 content = f.read()
 
                 match_em = re.search(r"Exact-Match Accuracy: (\d+\.\d+)", content)
@@ -350,7 +350,7 @@ class MLOpsOrchestrator:
 
             # Read the Modelfile template
             modelfile_path = os.path.join(_project_root(), "model", "Modelfile")
-            with open(modelfile_path, "r", encoding="utf-8") as f:
+            with open(modelfile_path, encoding="utf-8") as f:
                 modelfile_content = f.read()
 
             # Replace local paths with container paths
