@@ -17,6 +17,8 @@ Polish-language disinformation detection system using Explainable AI (XAI). Iden
 
 **Backend lint/format/test (use venv — `cd backend` first):**
 
+> **Note:** Shell state (`cd`) does not persist between independent tool calls. Each command must be self-contained — either chain with `&&` or use an absolute path.
+
 - Create venv: `cd backend && python -m venv .venv && .venv/Scripts/pip install -r requirements-dev.txt`
 - Lint: `cd backend && .venv/Scripts/ruff check app tests`
 - Format check: `cd backend && .venv/Scripts/ruff format --check app tests`
