@@ -182,6 +182,8 @@ class MLOpsOrchestrator:
                 project_root = _project_root()
                 base_model_path = os.path.join(project_root, "model", "bielik-4.5b-base")
 
+                test_dataset_path = os.path.join(project_root, "model", "dataset", "mipd_test.jsonl")
+
                 cmd = [
                     sys.executable,
                     "-u",
@@ -191,6 +193,8 @@ class MLOpsOrchestrator:
                     adapter_path,
                     "--base",
                     base_model_path,
+                    "--data",
+                    test_dataset_path,
                     "--backend",
                     BACKEND_URL,
                 ]
