@@ -62,10 +62,10 @@ In Docker, services communicate via the `app-network` bridge network. The backen
 
 All frontend API calls are centralized in `frontend/src/config.js`:
 ```js
-export const BACKEND_URL = 'http://localhost:8000';
+export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 ```
-
-For non-local deployments (reverse proxy, custom domain), update this value.
+- **Development**: Falls back to `http://localhost:8000` (direct backend access)
+- **Production**: Set `VITE_BACKEND_URL=/api` at build time; nginx proxies `/api/` → backend
 
 ## Training
 
@@ -93,8 +93,28 @@ The deployment step uses Docker CLI (installed in the backend image) with the Do
 
 ## Development vs Production
 
-The `docker-compose.yml` mounts source code volumes for live development. For production:
-- Remove source volume mounts
-- Build optimized frontend: `cd frontend && npm run build`
-- Add `--reload` flag to uvicorn for backend hot-reload in dev
-- Use a reverse proxy (nginx) for TLS termination
+**Development** (default) — source code is mounted for live reload:
+```bash
+docker compose up
+```
+The `docker-compose.yml` targets the `dev` stage of the frontend Dockerfile, which runs Vite's dev server on port 5173. The backend runs uvicorn with source mounted at `/app`.
+
+**Production** — optimized builds with no source mounts:
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
+```
+The production override:
+- Builds the frontend as static assets served by nginx on port 80 (SPA + reverse proxy to backend)
+- Removes source volume mounts (image contains built assets)
+- Sets `VITE_BACKEND_URL=/api` so the frontend uses nginx as a reverse proxy
+
+The frontend Dockerfile has three stages:
+1. **dev** — Node dev server with hot reload (used by docker-compose)
+2. **build** — Compiles Vite production bundle
+3. **production** — nginx:alpine serves static assets and proxies `/api/` and `/ws/` to the backend
+
+The backend Dockerfile uses a multi-stage build:
+1. **builder** — Installs all Python dependencies with gcc/g++ and Docker CLI
+2. **runtime** — Copies only installed packages and Docker CLI (no build tools), reducing image size by ~200 MB
+
+Both Dockerfiles use BuildKit cache mounts (`--mount=type=cache`) for pip and npm downloads, which persist across builds without bloating the image.

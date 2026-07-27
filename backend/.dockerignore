@@ -14,3 +14,33 @@ node_modules
 tests
 .DS_Store
 *.log
+
+# vendor/llama.cpp — exclude C/C++ source, tests, docs; keep only Python conversion scripts + gguf-py/
+vendor/llama.cpp/.git
+vendor/llama.cpp/cmake
+vendor/llama.cpp/common
+vendor/llama.cpp/ci
+vendor/llama.cpp/docs
+vendor/llama.cpp/examples
+vendor/llama.cpp/ggml
+vendor/llama.cpp/grammars
+vendor/llama.cpp/include
+vendor/llama.cpp/media
+vendor/llama.cpp/models
+vendor/llama.cpp/pocs
+vendor/llama.cpp/scripts
+vendor/llama.cpp/src
+vendor/llama.cpp/tests
+vendor/llama.cpp/tools
+vendor/llama.cpp/benches
+vendor/llama.cpp/vendor
+
+# Build artifacts and local data not needed in image
+unsloth_compiled_cache
+disinfo_system.db
+logs
+uploads
+check_wsl_dependencies.py
+Dockerfile
+ruff.toml
+requirements-dev.txt

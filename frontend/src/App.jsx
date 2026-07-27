@@ -31,7 +31,13 @@ function App() {
     const mountedRef = { current: true };
 
     function connect() {
-      ws = new WebSocket(`ws://${BACKEND_URL.replace(/^https?:\/\//, '')}/ws/training/status`);
+      // In production (BACKEND_URL is relative like "/api"), use the current host;
+      // in development (absolute URL like "http://localhost:8000"), strip the protocol.
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsHost = BACKEND_URL.startsWith('http')
+        ? BACKEND_URL.replace(/^https?:\/\//, '')
+        : window.location.host;
+      ws = new WebSocket(`${wsProtocol}//${wsHost}/ws/training/status`);
 
       ws.onopen = () => {
         setConnected(true);
