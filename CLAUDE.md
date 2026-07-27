@@ -64,6 +64,15 @@ Frontend (React/Vite :5173)
 - Test dataset: `model/dataset/mipd_test.jsonl` (1521 documents)
 - Model files: `model/bielik-4.5b-base/` (GGUF base), `model/xai-adapter/` (production LoRA)
 
+## Logs (Docker)
+
+- **Container stdout/stderr:** `docker compose logs backend` / `docker compose logs frontend` / `docker compose logs ollama`
+- **Training/benchmark/deploy log files** are inside the backend container at `/app/logs/`. Access them with:
+  - `docker compose exec backend ls //app/logs/` (use `//` to avoid Git Bash path mangling)
+  - `docker compose exec backend tail -50 //app/logs/training_2.log`
+  - Or copy out: `docker cp <backend-container>:/app/logs ./logs-backup`
+- Log files are persisted in the `backend_logs` named Docker volume (survives restarts).
+
 ## UI Language
 
 The entire UI and system prompts are in Polish. Technique names displayed to users are Polish translations of the English tags (e.g., `STRAWMAN` → "Chochoł (Słomiana kukła)").
