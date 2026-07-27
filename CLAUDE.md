@@ -28,9 +28,10 @@ Polish-language disinformation detection system using Explainable AI (XAI). Iden
 - `cd frontend && npm run build`
 - `cd frontend && npm run lint`
 
-**Training (requires WSL2 + NVIDIA GPU):**
+**Training (requires NVIDIA GPU):**
 
-- WSL dependencies: `pip install unsloth bitsandbytes accelerate torch trl datasets gguf`
+- **Docker:** Training runs inside the backend container (GPU passthrough). All dependencies are pre-installed via `requirements-wsl.txt` with pinned versions.
+- **WSL2 (without Docker):** `cd backend && python3 -m venv .venv-wsl && .venv-wsl/bin/pip install -r requirements-wsl.txt`
 - Training is triggered via the Expert Mode UI, not CLI directly
 
 **Ollama model setup:**
@@ -52,7 +53,7 @@ Frontend (React/Vite :5173)
 
 **Data flow for analysis:** User text → Frontend → FastAPI `/analyze` → Ollama `/api/chat` → LLM response → `llm_processor.normalize_llm_response()` (3-phase healing: JSON parse → schema normalization → tag validation) → structured result to frontend.
 
-**MLOps pipeline (orchestrator.py):** Upload `.jsonl` → trainer.py (Unsloth SFT in WSL2) → benchmark.py (evaluation on mipd_test.jsonl) → converter.py (HF→GGUF) → hot-swap via Ollama CLI. Progress is reported through callbacks → WebSocket broadcast.
+**MLOps pipeline (orchestrator.py):** Upload `.jsonl` → trainer.py (Unsloth SFT, runs in Docker container or WSL2) → benchmark.py (evaluation on mipd_test.jsonl) → converter.py (HF→GGUF) → hot-swap via Ollama CLI. Progress is reported through callbacks → WebSocket broadcast.
 
 ## Key Design Decisions
 
@@ -62,7 +63,7 @@ Frontend (React/Vite :5173)
 
 - **Ollama Modelfile** (`model/Modelfile`) uses ChatML template (`<|im_start|>`, `<|im_end|>`) — critical for Bielik model. The system prompt defines the exact JSON output format and allowed technique categories.
 
-- **Training runs only in WSL2**: Unsloth requires Linux. The backend detects `os.name == 'nt'` and warns. The `ProgressCallback` in trainer.py POSTs progress back to the Windows backend at `http://localhost:8000/training/progress`.
+- **Training runs inside the Docker backend container** (Linux, GPU passthrough). The Dockerfile installs both runtime and training dependencies. For local development without Docker, training requires WSL2 (Unsloth requires Linux). The backend detects `os.name == 'nt'` and warns. The `ProgressCallback` in trainer.py POSTs progress back to the backend at `{BACKEND_URL}/training/progress` (default `http://localhost:8000`, overridden to `http://backend:8000` in Docker).
 
 - **Baseline metrics** are read from `model/benchmark-reports/current_baseline_report.txt` via regex parsing in `orchestrator.py`.
 

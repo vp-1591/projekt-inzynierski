@@ -40,7 +40,8 @@ model/
 ├── dataset/
 │   ├── mipd_train_cot_clean.jsonl                (~55 MB)
 │   ├── mipd_test.jsonl                           (~8.5 MB)
-│   └── mipd_val.jsonl                            (~18 MB)
+│   ├── mipd_val.jsonl                            (~18 MB)
+│   └── mlops_testing_train_cot.jsonl             (test harness)
 ├── benchmark-reports/   (już w repozytorium)
 ├── Modelfile            (już w repozytorium)
 └── Modelfile.docker     (już w repozytorium)
