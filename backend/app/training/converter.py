@@ -46,10 +46,13 @@ def _strip_bnb_config(base_dir):
 def main():
     """CLI utility for converting HuggingFace adapters to GGUF format using llama.cpp."""
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--adapter", type=str, required=True, help="Path to adapter HF directory")
     parser.add_argument("--base", type=str, required=False, help="Path to base model directory")
-    parser.add_argument("--base-model-id", type=str, required=False, help="Base model ID (e.g. speakleash/Bielik-4.5B-v3)")
+    parser.add_argument(
+        "--base-model-id", type=str, required=False, help="Base model ID (e.g. speakleash/Bielik-4.5B-v3)"
+    )
     parser.add_argument("--output", type=str, required=True, help="Output GGUF file path (including .gguf extension)")
     parser.add_argument("--quant_method", type=str, default="q4_k_m", help="Quantization method (q4_k_m, f16, etc.)")
     args = parser.parse_args()
@@ -78,12 +81,7 @@ def main():
     if args.base:
         clean_base_dir = _strip_bnb_config(args.base)
 
-    cmd = [
-        sys.executable,
-        script_path,
-        "--outfile", args.output,
-        args.adapter
-    ]
+    cmd = [sys.executable, script_path, "--outfile", args.output, args.adapter]
 
     if args.base_model_id:
         cmd.extend(["--base-model-id", args.base_model_id])

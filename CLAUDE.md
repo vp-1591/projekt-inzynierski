@@ -15,6 +15,14 @@ Polish-language disinformation detection system using Explainable AI (XAI). Iden
 - Backend: `cd backend && python -m app.main` (FastAPI on :8000)
 - Frontend: `cd frontend && npm run dev` (Vite on :5173)
 
+**Backend lint/format/test:**
+
+- Lint: `cd backend && python -m ruff check app tests`
+- Format check: `cd backend && python -m ruff format --check app tests`
+- Auto-fix: `cd backend && python -m ruff check --fix app tests && python -m ruff format app tests`
+- Unit tests: `cd backend && python -m pytest tests/` (integration tests are skipped unless `--run-integration` is passed)
+- Ruff config is in `backend/ruff.toml` — excludes `vendor/` and `.venv/`
+
 **Frontend build/lint:**
 
 - `cd frontend && npm run build`

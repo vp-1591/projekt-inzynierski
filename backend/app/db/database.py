@@ -9,9 +9,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 DATABASE_PATH = BACKEND_DIR / "disinfo_system.db"
 SQLALCHEMY_DATABASE_URL = f"sqlite:///{DATABASE_PATH.as_posix()}"
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-)
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
@@ -27,5 +25,6 @@ class TrainingRun(Base):
     f1_score_after = Column(Float)
     status = Column(String)  # "running", "ready_to_promote", "deployed", "failed"
     adapter_path = Column(String)
+
 
 Base.metadata.create_all(bind=engine)

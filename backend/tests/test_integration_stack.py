@@ -111,9 +111,7 @@ def live_uvicorn_server():
 async def _expect_ready_to_promote_broadcast(port):
     import websockets
 
-    async with websockets.connect(
-        f"ws://127.0.0.1:{port}/ws/training/status"
-    ) as websocket:
+    async with websockets.connect(f"ws://127.0.0.1:{port}/ws/training/status") as websocket:
         await asyncio.wait_for(websocket.recv(), timeout=5)
 
         orchestrator = main.orchestrator_instance
@@ -138,9 +136,7 @@ def test_ready_to_promote_notify_broadcasts_on_live_websocket(live_uvicorn_serve
 
 
 @pytest.mark.integration
-def test_training_upload_launches_direct_python_invocation(
-    monkeypatch
-):
+def test_training_upload_launches_direct_python_invocation(monkeypatch):
     captured = {}
 
     class FakePopen:
@@ -197,6 +193,7 @@ def test_training_command_uses_direct_python_invocation():
     orchestrator = MLOpsOrchestrator(DummyDB())
 
     import unittest.mock as mock
+
     with mock.patch.object(orchestrator_module.subprocess, "Popen", FakePopen):
         orchestrator.start_manual_training("test_file.jsonl")
 

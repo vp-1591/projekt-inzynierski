@@ -20,10 +20,7 @@ def pytest_addoption(parser):
 
 
 def pytest_ignore_collect(collection_path, config):
-    if (
-        collection_path.name.startswith(".")
-        or collection_path.name.startswith("pytest-cache-files-")
-    ):
+    if collection_path.name.startswith(".") or collection_path.name.startswith("pytest-cache-files-"):
         return True
     if config.getoption("--run-integration"):
         return False
@@ -34,10 +31,7 @@ def pytest_collection_modifyitems(config, items):
     if config.getoption("--run-integration"):
         return
 
-    skip_integration = pytest.mark.skip(
-        reason="integration test; run with --run-integration"
-    )
+    skip_integration = pytest.mark.skip(reason="integration test; run with --run-integration")
     for item in items:
         if "integration" in item.keywords:
             item.add_marker(skip_integration)
-
