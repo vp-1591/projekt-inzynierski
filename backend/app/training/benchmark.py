@@ -139,6 +139,7 @@ def main():
     parser.add_argument(
         "--output_dir", type=str, default="./model/benchmark_reports", help="Output directory for reports"
     )
+    parser.add_argument("--num_samples", type=int, default=30, help="Number of samples to evaluate")
     parser.add_argument("--no-tqdm", action="store_true", help="Disable tqdm progress bar")
     args = parser.parse_args()
 
@@ -153,7 +154,7 @@ def main():
 
     # Load and Sample Dataset
     dataset = load_dataset("json", data_files=args.data, split="train")
-    dataset = dataset.shuffle(seed=42).select(range(min(7, len(dataset))))
+    dataset = dataset.shuffle(seed=42).select(range(min(args.num_samples, len(dataset))))
 
     # Process Prompts and Run Inference
     dataset = dataset.map(lambda x: format_prompt(x, tokenizer))

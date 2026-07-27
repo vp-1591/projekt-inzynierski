@@ -1,8 +1,11 @@
 import asyncio
+import contextlib
+import logging
 import os
 import re
 import subprocess
 import sys
+import threading
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -15,6 +18,7 @@ BACKEND_PORT = int(os.getenv("BACKEND_PORT", "8000"))
 BACKEND_URL = f"http://{BACKEND_HOST}:{BACKEND_PORT}"
 
 OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://ollama:11434")
+OLLAMA_CONTAINER = os.getenv("OLLAMA_CONTAINER", "ollama-service")
 
 
 def _project_root():
@@ -37,6 +41,7 @@ class MLOpsOrchestrator:
 
     def __init__(self, db: Session):
         self.db = db
+        self._lock = threading.RLock()
         # Pipeline State
         self.training_progress = 0
         self.evaluation_progress = 0
@@ -53,24 +58,26 @@ class MLOpsOrchestrator:
 
     def notify(self):
         """Triggers all registered status change callbacks."""
-        status = self.get_status()
+        with self._lock:
+            status = self.get_status()
         for callback in self.on_status_change:
             callback(status)
 
     def get_status(self):
         """Aggregates and returns the full pipeline status and metrics."""
         baseline = self.read_baseline_metrics()
-        return {
-            "status": self.status,
-            "training_progress": self.training_progress,
-            "evaluation_progress": self.evaluation_progress,
-            "baseline_f1_non_empty": baseline["f1"],
-            "baseline_exact_match": baseline["em"],
-            "new_f1_non_empty": self.new_f1_non_empty,
-            "new_exact_match": self.new_exact_match,
-            "deployed_adapter_path": self.deployed_adapter_path,
-            "last_deployment_status": self.last_deployment_status,
-        }
+        with self._lock:
+            return {
+                "status": self.status,
+                "training_progress": self.training_progress,
+                "evaluation_progress": self.evaluation_progress,
+                "baseline_f1_non_empty": baseline["f1"],
+                "baseline_exact_match": baseline["em"],
+                "new_f1_non_empty": self.new_f1_non_empty,
+                "new_exact_match": self.new_exact_match,
+                "deployed_adapter_path": self.deployed_adapter_path,
+                "last_deployment_status": self.last_deployment_status,
+            }
 
     def reset_candidate_state(self):
         """Clear per-run candidate state before launching a new training job."""
@@ -92,23 +99,33 @@ class MLOpsOrchestrator:
                 match_em = re.search(r"Exact-Match Accuracy: (\d+\.\d+)", content)
                 if match_em:
                     result["em"] = float(match_em.group(1))
+                else:
+                    logging.warning("Could not parse Exact-Match from baseline report at %s", report_path)
 
                 match_f1 = re.search(r"Mean Document-Level F1 \(excluding empty gold-label docs\): (\d+\.\d+)", content)
                 if not match_f1:
                     match_f1 = re.search(r"Mean F1 \(Non-empty gold docs\): (\d+\.\d+)", content)
                 if match_f1:
                     result["f1"] = float(match_f1.group(1))
+                else:
+                    logging.warning("Could not parse F1 from baseline report at %s", report_path)
             return result
-        except Exception:
+        except FileNotFoundError:
+            logging.warning("Baseline report not found at %s; returning zeros", report_path)
+            return result
+        except Exception as e:
+            logging.warning("Failed to read baseline metrics: %s; returning zeros", e)
             return result
 
     def start_manual_training(self, file_path: str):
         """Initiates the training process and tracks progress."""
-        if self.status not in self.STARTABLE_STATUSES:
-            return False
+        with self._lock:
+            if self.status not in self.STARTABLE_STATUSES:
+                return False
 
-        self.reset_candidate_state()
-        self.status = "training"
+            self.reset_candidate_state()
+            self.status = "training"
+
         self.notify()
 
         # Persist run metadata
@@ -116,7 +133,9 @@ class MLOpsOrchestrator:
         self.db.add(new_run)
         self.db.commit()
         self.db.refresh(new_run)
-        self.current_run_id = new_run.id
+
+        with self._lock:
+            self.current_run_id = new_run.id
 
         log_dir = "logs"
         os.makedirs(log_dir, exist_ok=True)
@@ -148,30 +167,62 @@ class MLOpsOrchestrator:
             f_log = open(log_file, "a", encoding="utf-8")  # noqa: SIM115
             process = subprocess.Popen(cmd, stdout=f_log, stderr=subprocess.STDOUT, encoding="utf-8", errors="replace")
             print(f"Training started (PID: {process.pid}). Logs: {log_file}")
+
+            # Monitor subprocess: detect crashes and close leaked log handle
+            monitor = threading.Thread(
+                target=self._monitor_training_process,
+                args=(process, new_run.id, log_file, f_log),
+                daemon=True,
+            )
+            monitor.start()
+
             return True
         except Exception as e:
             print(f"Training launch failed: {str(e)}")
-            self.status = "idle"
+            with self._lock:
+                self.status = "idle"
             new_run.status = "failed"
             new_run.end_time = datetime.utcnow()
             self.db.commit()
             self.notify()
             return False
 
+    def _monitor_training_process(self, process, run_id, log_file, log_handle):
+        """Daemon thread: waits for training subprocess, transitions state on crash."""
+        process.wait()
+        # Close the leaked log handle regardless of outcome
+        with contextlib.suppress(Exception):
+            log_handle.close()
+        if process.returncode != 0:
+            with self._lock:
+                self.status = "idle"
+                self.training_progress = 0
+            if run_id:
+                run = self.db.query(database.TrainingRun).get(run_id)
+                if run:
+                    run.status = "failed"
+                    run.end_time = datetime.utcnow()
+                    self.db.commit()
+            self.notify()
+
     def update_progress(self, stage: str, value: int):
         """External progress update hook."""
-        if stage == "training":
-            self.training_progress = value
-        elif stage == "evaluation":
-            self.evaluation_progress = value
+        with self._lock:
+            if stage == "training":
+                self.training_progress = value
+            elif stage == "evaluation":
+                self.evaluation_progress = value
         self.notify()
 
     def finish_training_and_evaluate(self, adapter_path: str):
         """Transitions the pipeline from training to benchmark evaluation."""
-        self.status = "evaluating"
-        self.training_progress = 100
-        self.evaluation_progress = 0
-        self.latest_adapter_path = adapter_path
+        with self._lock:
+            if self.status != "training":
+                return  # Already transitioned, ignore duplicate
+            self.status = "evaluating"
+            self.training_progress = 100
+            self.evaluation_progress = 0
+            self.latest_adapter_path = adapter_path
         self.notify()
 
         import threading
@@ -227,22 +278,25 @@ class MLOpsOrchestrator:
                             if "FINAL_F1_SCORE:" in line:
                                 try:
                                     captured_f1 = float(line.split(":")[1].strip())
-                                    self.new_f1_non_empty = captured_f1
+                                    with self._lock:
+                                        self.new_f1_non_empty = captured_f1
                                 except Exception:
                                     pass
 
                             if "FINAL_EXACT_MATCH:" in line:
                                 try:
                                     captured_em = float(line.split(":")[1].strip())
-                                    self.new_exact_match = captured_em
+                                    with self._lock:
+                                        self.new_exact_match = captured_em
                                 except Exception:
                                     pass
 
                 process.wait()
 
                 if process.returncode == 0:
-                    self.new_f1_non_empty = captured_f1
-                    self.status = "ready_to_promote"
+                    with self._lock:
+                        self.new_f1_non_empty = captured_f1
+                        self.status = "ready_to_promote"
                     if self.current_run_id:
                         run = self.db.query(database.TrainingRun).get(self.current_run_id)
                         if run:
@@ -252,7 +306,8 @@ class MLOpsOrchestrator:
                             run.status = "ready_to_promote"
                             self.db.commit()
                 else:
-                    self.status = "idle"
+                    with self._lock:
+                        self.status = "idle"
                     if self.current_run_id:
                         run = self.db.query(database.TrainingRun).get(self.current_run_id)
                         if run:
@@ -262,7 +317,8 @@ class MLOpsOrchestrator:
                 self.notify()
             except Exception as e:
                 print(f"Benchmark error: {e}")
-                self.status = "idle"
+                with self._lock:
+                    self.status = "idle"
                 self.notify()
 
         threading.Thread(target=run_benchmark).start()
@@ -281,7 +337,8 @@ class MLOpsOrchestrator:
                 f.write(f"{msg}\n")
 
         # --- Phase 1: GGUF Conversion ---
-        self.status = "deploying"
+        with self._lock:
+            self.status = "deploying"
         self.notify()
         log_deploy(f"Converting adapter: {adapter_path}")
 
@@ -319,15 +376,17 @@ class MLOpsOrchestrator:
             await process.wait()
             if process.returncode != 0:
                 log_deploy(f"Conversion failed (code {process.returncode})")
-                self.last_deployment_status = "deployment_error"
-                self.status = "ready_to_promote"
+                with self._lock:
+                    self.last_deployment_status = "deployment_error"
+                    self.status = "ready_to_promote"
                 self.notify()
                 return False
             log_deploy("Conversion successful.")
         except Exception as e:
             log_deploy(f"Conversion runtime error: {e}")
-            self.last_deployment_status = "deployment_error"
-            self.status = "ready_to_promote"
+            with self._lock:
+                self.last_deployment_status = "deployment_error"
+                self.status = "ready_to_promote"
             self.notify()
             return False
 
@@ -345,20 +404,23 @@ class MLOpsOrchestrator:
                         break
             except Exception as e:
                 print(f"GGUF access error: {e}")
-                self.last_deployment_status = "deployment_error"
-                self.status = "ready_to_promote"
+                with self._lock:
+                    self.last_deployment_status = "deployment_error"
+                    self.status = "ready_to_promote"
                 self.notify()
                 return False
 
         if not found_gguf_path:
-            self.last_deployment_status = "deployment_error"
-            self.status = "ready_to_promote"
+            with self._lock:
+                self.last_deployment_status = "deployment_error"
+                self.status = "ready_to_promote"
             self.notify()
             return False
 
         # Create model in Ollama
         try:
-            self.status = "deploying"
+            with self._lock:
+                self.status = "deploying"
             self.notify()
 
             # Read the Modelfile template
@@ -381,7 +443,7 @@ class MLOpsOrchestrator:
             create_cmd = [
                 "docker",
                 "exec",
-                "ollama-service",
+                OLLAMA_CONTAINER,
                 "ollama",
                 "create",
                 "bielik-lora-mipd",
@@ -392,8 +454,9 @@ class MLOpsOrchestrator:
             if result.returncode != 0:
                 raise Exception(f"Ollama create failed: {result.stderr}")
 
-            self.status = "deployment_success"
-            self.last_deployment_status = "deployment_success"
+            with self._lock:
+                self.status = "deployment_success"
+                self.last_deployment_status = "deployment_success"
             self.deployed_adapter_path = adapter_path
             if self.current_run_id:
                 run = self.db.query(database.TrainingRun).get(self.current_run_id)
@@ -403,8 +466,9 @@ class MLOpsOrchestrator:
                     self.db.commit()
         except Exception as e:
             print(f"Ollama hot-swap failed: {e}")
-            self.status = "deployment_error"
-            self.last_deployment_status = "deployment_error"
+            with self._lock:
+                self.status = "deployment_error"
+                self.last_deployment_status = "deployment_error"
             self.notify()
             return False
 
@@ -430,8 +494,9 @@ class MLOpsOrchestrator:
         # REASON: notify() must fire after the baseline file is updated so the
         # frontend receives fresh metrics. The old polling approach masked this
         # ordering bug; WebSockets only push on explicit notify().
-        self.new_f1_non_empty = 0.0
-        self.new_exact_match = 0.0
+        with self._lock:
+            self.new_f1_non_empty = 0.0
+            self.new_exact_match = 0.0
         self.notify()
 
         return True

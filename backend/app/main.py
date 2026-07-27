@@ -117,9 +117,12 @@ async def get_orchestrator(db: Session = Depends(get_db)):  # noqa: B008
         main_loop = asyncio.get_running_loop()
 
         def ws_notify_bridge(status):
-            if main_loop.is_running():
-                # Use the captured main_loop to securely schedule the coroutine from any thread
-                asyncio.run_coroutine_threadsafe(manager.broadcast(status), main_loop)
+            try:
+                if main_loop.is_running():
+                    # Use the captured main_loop to securely schedule the coroutine from any thread
+                    asyncio.run_coroutine_threadsafe(manager.broadcast(status), main_loop)
+            except RuntimeError:
+                pass  # Event loop is closing; notification is not critical
 
         orchestrator_instance.on_status_change.append(ws_notify_bridge)
     orchestrator_instance.db = db  # Ensure current DB session is used
@@ -141,6 +144,27 @@ async def upload_training_data(
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
+
+    # Validate JSONL format
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            first_line = f.readline().strip()
+            if not first_line:
+                os.remove(file_path)
+                raise HTTPException(status_code=400, detail="Empty file")
+            json.loads(first_line)
+            line_count = 0
+            f.seek(0)
+            for line in f:
+                line = line.strip()
+                if line:
+                    json.loads(line)
+                    line_count += 1
+                if line_count >= 100:
+                    break
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        os.remove(file_path)
+        raise HTTPException(status_code=400, detail=f"Invalid JSONL format: {str(e)}") from None
 
     if orchestrator.start_manual_training(file_path):
         return {"status": "started", "file": file.filename}

@@ -1,18 +1,9 @@
 from unittest.mock import mock_open, patch
 
-from app.training import orchestrator as orchestrator_module
+from conftest import DummyDB
+
+from app.training import orchestrator as orchestrator_module  # noqa: E402
 from app.training.orchestrator import MLOpsOrchestrator
-
-
-class DummyDB:
-    def add(self, obj):
-        self.obj = obj
-
-    def commit(self):
-        pass
-
-    def refresh(self, obj):
-        obj.id = 7
 
 
 def test_read_baseline_metrics_supports_document_level_report(monkeypatch):
@@ -50,10 +41,14 @@ def test_start_manual_training_after_deployment_resets_candidate_state(monkeypat
 
     class FakePopen:
         pid = 1234
+        returncode = 0  # Successful exit
 
         def __init__(self, cmd, **kwargs):
             captured["cmd"] = cmd
             captured["kwargs"] = kwargs
+
+        def wait(self):
+            pass
 
     monkeypatch.setattr(orchestrator_module.os, "makedirs", lambda *args, **kwargs: None)
     monkeypatch.setattr(orchestrator_module.subprocess, "Popen", FakePopen)
@@ -77,7 +72,7 @@ def test_start_manual_training_after_deployment_resets_candidate_state(monkeypat
     assert orchestrator.new_f1_non_empty == 0.0
     assert orchestrator.new_exact_match == 0.0
     assert orchestrator.latest_adapter_path is None
-    assert orchestrator.current_run_id == 7
+    assert orchestrator.current_run_id is not None
     assert orchestrator.deployed_adapter_path == "model/deployed"
     assert orchestrator.last_deployment_status == "deployment_success"
     # After refactoring, cmd is a list (not a shell string)

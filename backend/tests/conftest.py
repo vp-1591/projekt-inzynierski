@@ -35,3 +35,41 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "integration" in item.keywords:
             item.add_marker(skip_integration)
+
+
+class DummyDB:
+    """Minimal mock for SQLAlchemy Session used by MLOpsOrchestrator tests."""
+
+    def __init__(self):
+        self._objects = []
+
+    def add(self, obj):
+        self._objects.append(obj)
+
+    def commit(self):
+        for obj in self._objects:
+            if not hasattr(obj, "id") or obj.id is None:
+                obj.id = len(self._objects)
+
+    def refresh(self, obj):
+        if not hasattr(obj, "id") or obj.id is None:
+            obj.id = len(self._objects)
+
+    def query(self, model):
+        return DummyQuery(self._objects)
+
+
+class DummyQuery:
+    def __init__(self, objects):
+        self._objects = objects
+
+    def get(self, pk):
+        for obj in self._objects:
+            if getattr(obj, "id", None) == pk:
+                return obj
+        return None
+
+
+@pytest.fixture
+def dummy_db():
+    return DummyDB()

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from conftest import DummyDB
 from fastapi.testclient import TestClient
 
 from app import main
@@ -28,17 +29,6 @@ def _require_websockets():
         import websockets  # noqa: F401
     except ImportError:
         pytest.skip("websockets package is not installed")
-
-
-class DummyDB:
-    def add(self, obj):
-        self.obj = obj
-
-    def commit(self):
-        pass
-
-    def refresh(self, obj):
-        obj.id = 1
 
 
 @pytest.mark.integration
@@ -141,6 +131,7 @@ def test_training_upload_launches_direct_python_invocation(monkeypatch):
 
     class FakePopen:
         pid = 4242
+        returncode = 0  # Successful exit
 
         def __init__(self, cmd, **kwargs):
             captured["cmd"] = cmd
@@ -185,6 +176,7 @@ def test_training_command_uses_direct_python_invocation():
 
     class FakePopen:
         pid = 4242
+        returncode = 0  # Successful exit
 
         def __init__(self, cmd, **kwargs):
             captured["cmd"] = cmd

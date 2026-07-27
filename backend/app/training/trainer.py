@@ -91,28 +91,26 @@ class ModelTrainer:
 
         dataset = load_dataset("json", data_files=dataset_path, split="train")
 
-        def formatting_prompts_func(examples):
-            """Prepares conversations for the chat template with truncation support."""
-            texts = []
-            for input_text, output_text in zip(examples["input"], examples["output"], strict=False):
-                # Truncate input to avoid OOM on extremely long articles
-                truncated_input = input_text[:3500] if len(input_text) > 3500 else input_text
-
-                messages = [{"role": "user", "content": truncated_input}, {"role": "assistant", "content": output_text}]
-                texts.append(tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False))
-            return texts
+        def formatting_prompts_func(example):
+            """Prepares a single conversation for the chat template with truncation."""
+            truncated_input = example["input"][:3500] if len(example["input"]) > 3500 else example["input"]
+            messages = [
+                {"role": "user", "content": truncated_input},
+                {"role": "assistant", "content": example["output"]},
+            ]
+            return {"text": tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)}
 
         # Configure SFT Trainer
         trainer = SFTTrainer(
             model=model,
-            tokenizer=tokenizer,
+            processing_class=tokenizer,
             train_dataset=dataset,
-            dataset_text_field="text",
-            max_seq_length=max_seq_length,
-            dataset_num_proc=2,
-            packing=False,
             formatting_func=formatting_prompts_func,
             args=SFTConfig(
+                dataset_text_field="text",
+                max_length=max_seq_length,
+                dataset_num_proc=2,
+                packing=False,
                 per_device_train_batch_size=1,
                 gradient_accumulation_steps=4,
                 warmup_steps=5,
@@ -122,7 +120,7 @@ class ModelTrainer:
                 fp16=not torch.cuda.is_bf16_supported(),
                 bf16=torch.cuda.is_bf16_supported(),
                 logging_steps=1,
-                optim="paged_adamw_8bit",  # Offload optimizer states to CPU if needed
+                optim="paged_adamw_8bit",
                 weight_decay=0.01,
                 lr_scheduler_type="linear",
                 seed=3407,
