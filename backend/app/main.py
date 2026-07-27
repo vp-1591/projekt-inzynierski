@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import httpx
 import json
+import os
 from .db import database
 from .llm_processor import normalize_llm_response
 from pydantic import BaseModel
@@ -19,7 +20,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-OLLAMA_URL = "http://localhost:11434/api/chat"
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama:11434/api/chat")
+OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://ollama:11434")
 MODEL_NAME = "bielik-lora-mipd:latest"
 
 

@@ -1,8 +1,6 @@
 import asyncio
 import json
-import shutil
 import socket
-import subprocess
 import threading
 import time
 from pathlib import Path
@@ -13,41 +11,17 @@ from fastapi.testclient import TestClient
 
 from app import main
 from app.training import orchestrator as orchestrator_module
-from app.training.orchestrator import MLOpsOrchestrator, _get_wsl_host_ip, _to_wsl
+from app.training.orchestrator import MLOpsOrchestrator
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = PROJECT_ROOT / "backend"
-WSL_PYTHON = _to_wsl(str(BACKEND_ROOT / ".venv-wsl" / "bin" / "python"))
 
 
 def _free_port():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return sock.getsockname()[1]
-
-
-def _require_wsl():
-    if shutil.which("wsl") is None:
-        pytest.skip("wsl CLI is not available")
-
-    project_wsl_path = _to_wsl(str(PROJECT_ROOT))
-    check = subprocess.run(
-        [
-            "wsl",
-            "--",
-            "bash",
-            "-lc",
-            f"command -v bash >/dev/null && test -d '{project_wsl_path}' && test -x '{WSL_PYTHON}'",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
-    if check.returncode != 0:
-        pytest.skip(
-            "WSL distro, bash, project mount, or backend/.venv-wsl/bin/python is unavailable"
-        )
 
 
 def _require_websockets():
@@ -95,32 +69,6 @@ def test_real_ollama_model_smoke_via_analyze_endpoint():
     assert isinstance(data.get("discovered_techniques"), list)
 
 
-@pytest.mark.integration
-@pytest.mark.wsl
-def test_wsl_readiness_and_host_ip_resolution():
-    _require_wsl()
-
-    host_ip = _get_wsl_host_ip()
-
-    assert host_ip
-    assert "\x00" not in host_ip
-
-    probe = subprocess.run(
-        [
-            "wsl",
-            "--exec",
-            WSL_PYTHON,
-            "-c",
-            "import sys; print(sys.version_info[0])",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
-    assert probe.returncode == 0
-    assert probe.stdout.strip() == "3"
-
-
 @pytest.fixture
 def live_uvicorn_server():
     import uvicorn
@@ -161,59 +109,6 @@ def live_uvicorn_server():
     main.orchestrator_instance = None
 
 
-async def _post_progress_from_wsl(host_ip, port, stage, value):
-    payload = json.dumps({"stage": stage, "value": value})
-    code = (
-        "import urllib.request; "
-        f"data={payload!r}.encode('utf-8'); "
-        "req=urllib.request.Request("
-        f"'http://{host_ip}:{port}/training/progress', "
-        "data=data, headers={'Content-Type':'application/json'}, method='POST'); "
-        "print(urllib.request.urlopen(req, timeout=5).read().decode('utf-8'))"
-    )
-    result = subprocess.run(
-        ["wsl", "--exec", WSL_PYTHON, "-c", code],
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
-    assert result.returncode == 0, result.stderr or result.stdout
-    assert '"ok"' in result.stdout
-
-
-async def _expect_websocket_progress(port, stage, value):
-    import websockets
-
-    progress_field = f"{stage}_progress"
-    async with websockets.connect(
-        f"ws://127.0.0.1:{port}/ws/training/status"
-    ) as websocket:
-        initial = json.loads(await asyncio.wait_for(websocket.recv(), timeout=5))
-        assert "status" in initial
-
-        host_ip = _get_wsl_host_ip()
-        await _post_progress_from_wsl(host_ip, port, stage, value)
-
-        deadline = time.time() + 8
-        while time.time() < deadline:
-            message = json.loads(await asyncio.wait_for(websocket.recv(), timeout=5))
-            if message.get(progress_field) == value:
-                return
-
-        pytest.fail(f"websocket did not receive {progress_field}={value}")
-
-
-@pytest.mark.integration
-@pytest.mark.wsl
-@pytest.mark.websocket
-@pytest.mark.parametrize("stage", ["training", "evaluation"])
-def test_wsl_progress_callback_reaches_live_websocket(live_uvicorn_server, stage):
-    _require_wsl()
-    _require_websockets()
-
-    asyncio.run(_expect_websocket_progress(live_uvicorn_server, stage, 37))
-
-
 async def _expect_ready_to_promote_broadcast(port):
     import websockets
 
@@ -244,8 +139,7 @@ def test_ready_to_promote_notify_broadcasts_on_live_websocket(live_uvicorn_serve
 
 
 @pytest.mark.integration
-@pytest.mark.wsl
-def test_training_upload_launches_wsl_command_with_backend_callback(
+def test_training_upload_launches_direct_python_invocation(
     monkeypatch
 ):
     captured = {}
@@ -256,10 +150,11 @@ def test_training_upload_launches_wsl_command_with_backend_callback(
         def __init__(self, cmd, **kwargs):
             captured["cmd"] = cmd
             captured["kwargs"] = kwargs
+            # Should NOT have shell=True
+            assert kwargs.get("shell") != True
 
     orchestrator = MLOpsOrchestrator(DummyDB())
     monkeypatch.chdir(BACKEND_ROOT)
-    monkeypatch.setattr(orchestrator_module, "_get_wsl_host_ip", lambda: "172.20.0.1")
     monkeypatch.setattr(orchestrator_module.subprocess, "Popen", FakePopen)
     main.app.dependency_overrides[main.get_orchestrator] = lambda: orchestrator
 
@@ -282,6 +177,32 @@ def test_training_upload_launches_wsl_command_with_backend_callback(
     assert response.json() == {"status": "started", "file": "tiny.jsonl"}
     assert orchestrator.status == "training"
     assert orchestrator.current_run_id == 1
-    assert "wsl --exec bash -c" in captured["cmd"]
-    assert "--data uploads/tiny.jsonl" in captured["cmd"]
-    assert "--backend http://172.20.0.1:8000" in captured["cmd"]
+    assert isinstance(captured["cmd"], list)
+    assert "app.training.trainer" in captured["cmd"]
+    assert "wsl" not in captured["cmd"]
+    assert "--backend" in captured["cmd"]
+
+
+@pytest.mark.integration
+def test_training_command_uses_direct_python_invocation():
+    """Verify that training uses direct subprocess, not wsl --exec."""
+    captured = {}
+
+    class FakePopen:
+        pid = 4242
+
+        def __init__(self, cmd, **kwargs):
+            captured["cmd"] = cmd
+            captured["shell"] = kwargs.get("shell", False)
+
+    orchestrator = MLOpsOrchestrator(DummyDB())
+
+    import unittest.mock as mock
+    with mock.patch.object(orchestrator_module.subprocess, "Popen", FakePopen):
+        orchestrator.start_manual_training("test_file.jsonl")
+
+    # Assertions for Linux/Docker
+    assert isinstance(captured["cmd"], list)
+    assert "app.training.trainer" in captured["cmd"]
+    assert "wsl" not in captured["cmd"]
+    assert captured["shell"] == False  # Should NOT use shell

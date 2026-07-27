@@ -79,7 +79,7 @@ def main():
         clean_base_dir = _strip_bnb_config(args.base)
 
     cmd = [
-        "python3",
+        sys.executable,
         script_path,
         "--outfile", args.output,
         args.adapter

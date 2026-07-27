@@ -2,7 +2,8 @@
  * Service to handle disinformation detection analysis using local Ollama instance.
  */
 
-const BACKEND_URL = 'http://localhost:8000/analyze';
+import { BACKEND_URL } from '../config';
+const ANALYZE_ENDPOINT = `${BACKEND_URL}/analyze`;
 
 
 // Mapping model tags to user-friendly Polish names and descriptions
@@ -60,7 +61,7 @@ const TECHNIQUE_MAPPING = {
  */
 export async function analyzeText(text) {
   try {
-    const response = await fetch(BACKEND_URL, {
+    const response = await fetch(ANALYZE_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

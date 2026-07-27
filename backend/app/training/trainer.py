@@ -40,9 +40,6 @@ class ModelTrainer:
         Executes Supervised Fine-Tuning (SFT). 
         Optimized for 4-bit quantization and gradient checkpointing to save VRAM.
         """
-        if os.name == 'nt':
-            print("WARNING: Unsloth is optimized for Linux. Running on Windows may fail.")
-
         import sys
         import subprocess
 

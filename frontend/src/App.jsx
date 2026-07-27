@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import './index.css'
 import { InputSection } from './components/InputSection'
 import { analyzeText } from './services/disinformationDetector'
+import { BACKEND_URL } from './config'
 
 function App() {
   const [results, setResults] = useState(null)
@@ -21,7 +22,7 @@ function App() {
   useEffect(() => {
     let ws = null;
     if (showExpertMode) {
-      ws = new WebSocket('ws://localhost:8000/ws/training/status');
+      ws = new WebSocket(`ws://${BACKEND_URL.replace(/^https?:\/\//, '')}/ws/training/status`);
       
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
@@ -50,12 +51,12 @@ function App() {
     formData.append('file', file);
 
     try {
-      const response = await fetch('http://localhost:8000/training/upload', {
+      const response = await fetch(`${BACKEND_URL}/training/upload`, {
         method: 'POST',
         body: formData,
       });
       if (response.ok) {
-        const statusResponse = await fetch('http://localhost:8000/training/status');
+        const statusResponse = await fetch(`${BACKEND_URL}/training/status`);
         if (statusResponse.ok) {
           setTrainingStatus(await statusResponse.json());
         }
@@ -79,7 +80,7 @@ function App() {
     }
     
     try {
-      const response = await fetch('http://localhost:8000/training/promote', { method: 'POST' });
+      const response = await fetch(`${BACKEND_URL}/training/promote`, { method: 'POST' });
       if (response.ok) {
         // Success feedback is handled by button state "Wdrażanie..." -> "Wdróż model" transition
       }

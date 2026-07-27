@@ -1,0 +1,85 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama-service
+    entrypoint: ["/bin/sh", "/model/ollama-entrypoint.sh"]
+    ports:
+      - "11435:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./model:/model
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list | grep bielik-lora-mipd || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend-service
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_URL=http://ollama:11434/api/chat
+      - OLLAMA_API_URL=http://ollama:11434
+      - BACKEND_HOST=backend
+      - BACKEND_PORT=8000
+    volumes:
+      - ./backend:/app
+      - ./model:/app/model
+      - backend_uploads:/app/uploads
+      - backend_logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      ollama:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend-service
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+volumes:
+  ollama_data:
+    driver: local
+  backend_uploads:
+    driver: local
+  backend_logs:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
