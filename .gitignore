@@ -66,3 +66,5 @@ section-*.txt
 # Fonts
 *.ttf
 Inter,Platypi,Source_Serif_4/
+
+tmp/
