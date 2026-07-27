@@ -8,6 +8,8 @@ function App() {
   const [results, setResults] = useState(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [error, setError] = useState(null)
+  const [connected, setConnected] = useState(false);
+  const [wsError, setWsError] = useState(null);
   const [showExpertMode, setShowExpertMode] = useState(false)
   const [trainingStatus, setTrainingStatus] = useState({
     status: 'idle',
@@ -20,26 +22,54 @@ function App() {
   });
 
   useEffect(() => {
+    if (!showExpertMode) return;
+
     let ws = null;
-    if (showExpertMode) {
+    let retryTimeout = null;
+    let retryDelay = 3000;
+    const maxRetryDelay = 30000;
+    const mountedRef = { current: true };
+
+    function connect() {
       ws = new WebSocket(`ws://${BACKEND_URL.replace(/^https?:\/\//, '')}/ws/training/status`);
-      
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        setTrainingStatus(data);
+
+      ws.onopen = () => {
+        setConnected(true);
+        setWsError(null);
+        retryDelay = 3000; // reset backoff on successful connection
       };
 
-      ws.onerror = (err) => {
-        console.error("WebSocket error:", err);
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setTrainingStatus(data);
+        } catch {
+          setWsError('Otrzymano nieprawidłowe dane z serwera');
+        }
+      };
+
+      ws.onerror = () => {
+        setConnected(false);
+        setWsError('Błąd połączenia z serwerem');
       };
 
       ws.onclose = () => {
-        console.log("WebSocket connection closed");
+        setConnected(false);
+        ws = null;
+        if (!mountedRef.current) return;
+        retryTimeout = setTimeout(() => {
+          retryDelay = Math.min(retryDelay * 2, maxRetryDelay);
+          connect();
+        }, retryDelay);
       };
     }
 
+    connect();
+
     return () => {
+      mountedRef.current = false;
       if (ws) ws.close();
+      if (retryTimeout) clearTimeout(retryTimeout);
     };
   }, [showExpertMode]);
 
@@ -179,24 +209,26 @@ function App() {
             </button>
             
             {/* Status Indicator Circle */}
-            <div 
-              title={`Status: ${trainingStatus.status}`}
+            <div
+              title={!connected ? 'Status: rozłączono' : `Status: ${trainingStatus.status}`}
               style={{
-                width: '16px', 
-                height: '16px', 
+                width: '16px',
+                height: '16px',
                 borderRadius: '50%',
-                backgroundColor: (() => {
+                backgroundColor: !connected ? 'transparent' : (() => {
                   switch (trainingStatus.status) {
-                    case 'deploying': return '#fbbf24'; // Yellow
-                    case 'deployment_success': return '#10b981'; // Green
-                    case 'deployment_error': return '#ef4444'; // Red
-                    case 'ready_to_promote': return '#3b82f6'; // Blue
-                    default: return '#9ca3af'; // Gray
+                    case 'deploying': return '#fbbf24';
+                    case 'deployment_success': return '#10b981';
+                    case 'deployment_error': return '#ef4444';
+                    case 'ready_to_promote': return '#3b82f6';
+                    default: return '#9ca3af';
                   }
                 })(),
-                transition: 'background-color 0.3s ease'
+                border: !connected ? '2px solid #f97316' : 'none',
+                transition: 'background-color 0.3s ease, border 0.3s ease'
               }}
             ></div>
+            {!connected && <span className="connection-lost-text">Brak połączenia</span>}
           </div>
         </div>
       </aside>
@@ -228,6 +260,10 @@ function App() {
             <div className="error-message">
               {error}
             </div>
+          )}
+
+          {wsError && (
+            <div className="error-message">{wsError}</div>
           )}
 
           <section className="results-container">

@@ -80,8 +80,6 @@ class ModelTrainer:
 
         dataset = load_dataset("json", data_files=dataset_path, split="train")
         
-        from transformers import TrainingArguments
-        
         def formatting_prompts_func(examples):
             """Prepares conversations for the chat template with truncation support."""
             texts = []
@@ -106,7 +104,7 @@ class ModelTrainer:
             dataset_num_proc = 2,
             packing = False,
             formatting_func = formatting_prompts_func,
-            args = TrainingArguments(
+            args = SFTConfig(
                 per_device_train_batch_size = 1,
                 gradient_accumulation_steps = 4,
                 warmup_steps = 5,
