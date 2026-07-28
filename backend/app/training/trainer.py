@@ -4,6 +4,7 @@ os.environ["UNSLOTH_DISABLE_STATISTICS"] = "1"
 os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
+import functools
 import sys
 
 import requests
@@ -29,6 +30,23 @@ class ProgressCallback(TrainerCallback):
                 )
             except Exception as e:
                 print(f"Failed to report progress: {e}", file=sys.stderr, flush=True)
+
+
+def format_training_example(example, tokenizer, max_input_length=3500):
+    """Format a training example for SFT. Returns a plain string.
+
+    TRL's SFTTrainer._prepare_dataset wraps the formatting function's return
+    value in {"text": ...} automatically. Returning a dict would cause nested
+    dicts that crash add_eos (AttributeError: 'dict' has no attribute 'endswith').
+    """
+    truncated_input = (
+        example["input"][:max_input_length] if len(example["input"]) > max_input_length else example["input"]
+    )
+    messages = [
+        {"role": "user", "content": truncated_input},
+        {"role": "assistant", "content": example["output"]},
+    ]
+    return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
 
 
 class ModelTrainer:
@@ -91,21 +109,14 @@ class ModelTrainer:
 
         dataset = load_dataset("json", data_files=dataset_path, split="train")
 
-        def formatting_prompts_func(example):
-            """Prepares a single conversation for the chat template with truncation."""
-            truncated_input = example["input"][:3500] if len(example["input"]) > 3500 else example["input"]
-            messages = [
-                {"role": "user", "content": truncated_input},
-                {"role": "assistant", "content": example["output"]},
-            ]
-            return {"text": tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)}
+        formatting_func = functools.partial(format_training_example, tokenizer=tokenizer)
 
         # Configure SFT Trainer
         trainer = SFTTrainer(
             model=model,
             processing_class=tokenizer,
             train_dataset=dataset,
-            formatting_func=formatting_prompts_func,
+            formatting_func=formatting_func,
             args=SFTConfig(
                 dataset_text_field="text",
                 max_length=max_seq_length,
