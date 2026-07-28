@@ -67,4 +67,6 @@ section-*.txt
 *.ttf
 Inter,Platypi,Source_Serif_4/
 
+# harness artifacts
 tmp/
+PROGRESS.md
