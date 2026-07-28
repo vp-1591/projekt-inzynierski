@@ -1,0 +1,43 @@
+#!/bin/bash
+# PreToolUse hook: anchor every Bash command to the current session's repo root.
+#
+# Resolves the nearest git root from the hook's `cwd` field (which is already
+# scoped correctly for the main session or any worktree) and prepends a `cd`
+# so the model never needs to reason about working directory.
+#
+# Only fires for the Bash tool. Other tools pass through unchanged.
+
+input=$(cat)
+tool=$(echo "$input" | jq -r '.tool // empty')
+
+# Only rewrite Bash commands
+if [ "$tool" != "Bash" ]; then
+  echo "$input"
+  exit 0
+fi
+
+cmd=$(echo "$input" | jq -r '.tool_input.command // empty')
+cwd=$(echo "$input" | jq -r '.cwd // empty')
+
+# If either is missing, pass through
+if [ -z "$cmd" ] || [ -z "$cwd" ]; then
+  echo "$input"
+  exit 0
+fi
+
+# Resolve the git root from the real cwd (works for main repo and worktrees)
+root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || root="$cwd"
+
+# Wrap the command — cd to root first, then run the original command
+new_cmd="cd \"$root\" && ($cmd)"
+
+# Build the updated input, preserving all other fields
+new_input=$(echo "$input" | jq --arg cmd "$new_cmd" '.tool_input.command = $cmd')
+
+jq -n --argjson input "$new_input" '{
+  hookSpecificOutput: {
+    hookEventName: "PreToolUse",
+    permissionDecision: "allow",
+    updatedInput: $input
+  }
+}'
