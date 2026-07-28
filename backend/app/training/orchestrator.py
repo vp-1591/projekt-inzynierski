@@ -34,6 +34,7 @@ class MLOpsOrchestrator:
 
     STARTABLE_STATUSES = {
         "idle",
+        "training_error",
         "ready_to_promote",
         "deployment_success",
         "deployment_error",
@@ -49,7 +50,7 @@ class MLOpsOrchestrator:
         self.baseline_exact_match = 0.0
         self.new_f1_non_empty = 0.0
         self.new_exact_match = 0.0
-        self.status = "idle"  # idle, training, evaluating, ready_to_promote
+        self.status = "idle"  # idle, training, evaluating, ready_to_promote, training_error
         self.latest_adapter_path = None
         self.deployed_adapter_path = None
         self.last_deployment_status = None
@@ -180,7 +181,7 @@ class MLOpsOrchestrator:
         except Exception as e:
             print(f"Training launch failed: {str(e)}")
             with self._lock:
-                self.status = "idle"
+                self.status = "training_error"
             new_run.status = "failed"
             new_run.end_time = datetime.utcnow()
             self.db.commit()
@@ -189,21 +190,38 @@ class MLOpsOrchestrator:
 
     def _monitor_training_process(self, process, run_id, log_file, log_handle):
         """Daemon thread: waits for training subprocess, transitions state on crash."""
-        process.wait()
-        # Close the leaked log handle regardless of outcome
-        with contextlib.suppress(Exception):
-            log_handle.close()
-        if process.returncode != 0:
+        try:
+            process.wait()
+            # Close the leaked log handle regardless of outcome
+            with contextlib.suppress(Exception):
+                log_handle.close()
+            if process.returncode != 0:
+                with self._lock:
+                    self.status = "training_error"
+                    self.training_progress = 0
+                if run_id:
+                    run = self.db.query(database.TrainingRun).get(run_id)
+                    if run:
+                        run.status = "failed"
+                        run.end_time = datetime.utcnow()
+                        self.db.commit()
+                self.notify()
+        except Exception:
+            logging.exception("Monitor thread error for run_id=%s", run_id)
+            with contextlib.suppress(Exception):
+                log_handle.close()
             with self._lock:
-                self.status = "idle"
+                self.status = "training_error"
                 self.training_progress = 0
             if run_id:
-                run = self.db.query(database.TrainingRun).get(run_id)
-                if run:
-                    run.status = "failed"
-                    run.end_time = datetime.utcnow()
-                    self.db.commit()
-            self.notify()
+                with contextlib.suppress(Exception):
+                    run = self.db.query(database.TrainingRun).get(run_id)
+                    if run:
+                        run.status = "failed"
+                        run.end_time = datetime.utcnow()
+                        self.db.commit()
+            with contextlib.suppress(Exception):
+                self.notify()
 
     def update_progress(self, stage: str, value: int):
         """External progress update hook."""
@@ -307,7 +325,7 @@ class MLOpsOrchestrator:
                             self.db.commit()
                 else:
                     with self._lock:
-                        self.status = "idle"
+                        self.status = "training_error"
                     if self.current_run_id:
                         run = self.db.query(database.TrainingRun).get(self.current_run_id)
                         if run:
@@ -316,10 +334,11 @@ class MLOpsOrchestrator:
                             self.db.commit()
                 self.notify()
             except Exception as e:
-                print(f"Benchmark error: {e}")
+                logging.exception("Benchmark error: %s", e)
                 with self._lock:
-                    self.status = "idle"
-                self.notify()
+                    self.status = "training_error"
+                with contextlib.suppress(Exception):
+                    self.notify()
 
         threading.Thread(target=run_benchmark).start()
 

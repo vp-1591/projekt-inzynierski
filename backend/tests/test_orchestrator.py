@@ -59,7 +59,9 @@ def orch(db):
 # ===========================================================================
 
 
-@pytest.mark.parametrize("initial_status", ["idle", "ready_to_promote", "deployment_success", "deployment_error"])
+@pytest.mark.parametrize(
+    "initial_status", ["idle", "training_error", "ready_to_promote", "deployment_success", "deployment_error"]
+)
 @patch("app.training.orchestrator.os.makedirs", MagicMock())
 @patch("builtins.open", mock_open())
 def test_start_manual_training_from_startable_statuses(initial_status, orch):
@@ -146,7 +148,7 @@ def test_start_manual_training_resets_candidate_state(orch):
 
 
 def test_monitor_training_process_detects_crash(db):
-    """When the subprocess exits with non-zero returncode, status reverts to 'idle'."""
+    """When the subprocess exits with non-zero returncode, status transitions to 'training_error'."""
     orch = MLOpsOrchestrator(db=db)
     orch.status = "training"
     orch.training_progress = 50
@@ -158,7 +160,7 @@ def test_monitor_training_process_detects_crash(db):
 
     orch._monitor_training_process(fake_proc, run_id=None, log_file="/tmp/test.log", log_handle=mock_log_handle)
 
-    assert orch.status == "idle"
+    assert orch.status == "training_error"
     assert orch.training_progress == 0
     mock_log_handle.close.assert_called_once()
 
@@ -221,6 +223,42 @@ def test_monitor_training_process_marks_run_failed(db):
     updated_run = db.query(TrainingRun).get(run_id)
     assert updated_run.status == "failed"
     assert updated_run.end_time is not None
+
+
+def test_monitor_training_process_notify_on_exception(db):
+    """Even if DB operations fail in _monitor_training_process, status becomes 'training_error' and notify fires."""
+    orch = MLOpsOrchestrator(db=db)
+    orch.status = "training"
+    orch.training_progress = 50
+
+    # DB that raises on commit — simulates stale connection
+    crash_db = DummyDB()
+
+    def bad_commit():
+        raise RuntimeError("DB connection lost")
+
+    crash_db.commit = bad_commit
+    orch.db = crash_db
+
+    fake_proc = MagicMock()
+    fake_proc.wait.return_value = 1
+    fake_proc.returncode = 1
+    mock_log_handle = MagicMock()
+
+    notified = []
+    orch.on_status_change.append(lambda s: notified.append(s))
+
+    # Should not raise, and should still set status + notify
+    orch._monitor_training_process(fake_proc, run_id=1, log_file="/tmp/test.log", log_handle=mock_log_handle)
+
+    assert orch.status == "training_error"
+    assert orch.training_progress == 0
+    assert len(notified) >= 1
+
+
+def test_startable_statuses_includes_training_error():
+    """'training_error' is in STARTABLE_STATUSES so users can retry after a crash."""
+    assert "training_error" in MLOpsOrchestrator.STARTABLE_STATUSES
 
 
 # ===========================================================================

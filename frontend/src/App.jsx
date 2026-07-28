@@ -159,8 +159,8 @@ function App() {
               <span>{trainingStatus.training_progress}%</span>
             </div>
             <div className="progress-bar">
-              <div 
-                className="progress-fill" 
+              <div
+                className={`progress-fill${trainingStatus.status === 'training' ? ' progress-fill--active' : ''}`}
                 style={{ width: `${trainingStatus.training_progress}%` }}
               ></div>
             </div>
@@ -209,9 +209,10 @@ function App() {
               disabled={trainingStatus.status !== 'ready_to_promote'}
               className="promote-button"
             >
-              {trainingStatus.status === 'deploying' ? 'Wdrażanie...' : 
-               trainingStatus.status === 'deployment_success' ? 'Wdrożono' : 
-               trainingStatus.status === 'deployment_error' ? 'Błąd!' : 'Wdróż model'}
+              {trainingStatus.status === 'deploying' ? 'Wdrażanie...' :
+               trainingStatus.status === 'deployment_success' ? 'Wdrożono' :
+               trainingStatus.status === 'deployment_error' ? 'Błąd!' :
+               trainingStatus.status === 'training_error' ? 'Błąd treningu' : 'Wdróż model'}
             </button>
             
             {/* Status Indicator Circle */}
@@ -226,6 +227,7 @@ function App() {
                     case 'deploying': return '#fbbf24';
                     case 'deployment_success': return '#10b981';
                     case 'deployment_error': return '#ef4444';
+                    case 'training_error': return '#ef4444';
                     case 'ready_to_promote': return '#3b82f6';
                     default: return '#9ca3af';
                   }
@@ -270,6 +272,12 @@ function App() {
 
           {wsError && (
             <div className="error-message">{wsError}</div>
+          )}
+
+          {trainingStatus.status === 'training_error' && (
+            <div className="training-error-banner">
+              Trening zakończył się błędem. Sprawdź logi i spróbuj ponownie.
+            </div>
           )}
 
           <section className="results-container">

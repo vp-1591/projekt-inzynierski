@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 
 import httpx
@@ -121,8 +122,8 @@ async def get_orchestrator(db: Session = Depends(get_db)):  # noqa: B008
                 if main_loop.is_running():
                     # Use the captured main_loop to securely schedule the coroutine from any thread
                     asyncio.run_coroutine_threadsafe(manager.broadcast(status), main_loop)
-            except RuntimeError:
-                pass  # Event loop is closing; notification is not critical
+            except RuntimeError as e:
+                logging.warning("Failed to schedule WS broadcast: %s", e)
 
         orchestrator_instance.on_status_change.append(ws_notify_bridge)
     orchestrator_instance.db = db  # Ensure current DB session is used
