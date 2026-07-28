@@ -79,7 +79,7 @@ flowchart LR
 
 - **Unsloth tokenizer pickling** (`trainer.py`): `Dataset.map(num_proc=N)` crashes for `N > 1` due to `ConfigModuleInstance`. Module-level monkey-patch forces `num_proc=None`. Do NOT set `dataset_num_proc` in `SFTConfig`.
 
-- **Ollama deployment via HTTP API**: `deploy_new_adapter()` calls Ollama `/api/create` via `httpx.AsyncClient.stream()` with 300s timeout, sending Modelfile content in the request body. Path rewriting maps `/app/model/` → `/model/` for the Ollama container. GGUF adapter must have `.gguf` extension. Streaming NDJSON responses are parsed for error detection.
+- **Ollama deployment via HTTP API** (v0.5.5+): `deploy_new_adapter()` uses a two-phase approach: (1) upload GGUF files as blobs via `POST /api/blobs/{sha256_digest}` with deduplication via `HEAD` check, then (2) call `POST /api/create` with JSON fields (`files`, `adapters`, `template`, `system`, `parameters`) — not a Modelfile string. Requires Ollama v0.5.5+. See `model/CLAUDE.md` for format details. Streaming NDJSON responses are parsed for error detection.
 
 - **Baseline metrics** read from `model/benchmark-reports/current_baseline_report.txt` via regex in `orchestrator.py`.
 

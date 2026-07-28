@@ -50,6 +50,9 @@ _thesis_build
 /backend/logs/
 /model/*
 !/model/Modelfile
+!/model/Modelfile.docker
+!/model/CLAUDE.md
+!/model/ollama-entrypoint.sh
 !/model/benchmark-reports/
 
 # Benchmark reports: ignore root files, allow subfolders (adapters)

@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 import os
@@ -20,6 +21,89 @@ BACKEND_PORT = int(os.getenv("BACKEND_PORT", "8000"))
 BACKEND_URL = f"http://{BACKEND_HOST}:{BACKEND_PORT}"
 
 OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://ollama:11434")
+
+# ── Ollama model configuration ───────────────────────────────────────
+# These constants mirror model/Modelfile.docker.  Ollama v0.5.5+ (Jan 2025)
+# removed Modelfile-based input from POST /api/create; deployment now uses
+# the JSON-based API with separate blob uploads.
+OLLAMA_MODEL_NAME = "bielik-lora-mipd"
+
+# ChatML template — critical for Bielik
+CHATML_TEMPLATE = """<|im_start|>system
+{{ .System }}<|im_end|>
+<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+"""
+
+SYSTEM_PROMPT = """Jesteś ekspertem w dziedzinie analizy mediów i lingwistyki, specjalizującym się w wykrywaniu propagandy, manipulacji poznawczej i błędów logicznych w tekstach w języku polskim.
+
+**Twoje zadanie:**
+Przeanalizuj dostarczony tekst wejściowy w języku polskim, aby zidentyfikować konkretne techniki manipulacji. Musisz oprzeć swoją analizę wyłącznie na dostarczonym tekście, szukając wzorców, które mają na celu wpłynięcie na opinię czytelnika za pomocą środków irracjonalnych lub zwodniczych.
+
+**Dozwolone kategorie manipulacji:**
+Jesteś ściśle ograniczony do klasyfikowania technik w następujących kategoriach. Nie używaj żadnych innych tagów.
+
+1.  **REFERENCE_ERROR**: Cytaty, które nie popierają tezy, są zmyślone lub pochodzą z niewiarygodnych źródeł.
+2.  **WHATABOUTISM**: Dyskredytowanie stanowiska oponenta poprzez zarzucanie mu hipokryzji, bez bezpośredniego odparcia jego argumentów.
+3.  **STRAWMAN**: Przeinaczenie argumentu oponenta (stworzenie "chochoła"), aby łatwiej go było zaatakować.
+4.  **EMOTIONAL_CONTENT**: Używanie języka nasyconego emocjami (strach, gniew, litość, radość) w celu ominięcia racjonalnego, krytycznego myślenia.
+5.  **CHERRY_PICKING**: Zatajanie dowodów lub ignorowanie danych, które zaprzeczają argumentowi, przy jednoczesnym przedstawianiu tylko danych potwierdzających.
+6.  **FALSE_CAUSE**: Błędne zidentyfikowanie przyczyny zjawiska (np. mylenie korelacji z przyczynowością).
+7.  **MISLEADING_CLICKBAIT**: Nagłówki lub wstępy, które sensacyjnie wyolbrzymiają lub fałszywie przedstawiają faktyczną treść tekstu.
+8.  **ANECDOTE**: Wykorzystywanie odosobnionych historii osobistych lub pojedynczych przykładów jako ważnego dowodu na ogólny trend lub fakt naukowy.
+9.  **LEADING_QUESTIONS**: Pytania sformułowane w sposób sugerujący konkretną odpowiedź lub zawierające nieudowodnione założenie.
+10. **EXAGGERATION**: Hiperboliczne stwierdzenia, które wyolbrzymiają fakty, aby wywołać reakcję.
+11. **QUOTE_MINING**: Wyrywanie cytatów z kontekstu w celu zniekształcenia intencji pierwotnego autora.
+
+**Format wyjściowy:**
+Musisz odpowiedzieć pojedynczym, poprawnym obiektem JSON zawierającym dwa klucze:
+1.  `"reasoning"`: Spójny akapit w **języku polskim** wyjaśniający, które techniki znaleziono i dlaczego. Musisz przytoczyć konkretną logikę lub fragmenty tekstu, aby uzasadnić swoją klasyfikację.
+2.  `"discovered_techniques"`: Lista ciągów znaków (stringów) zawierająca dokładnie te tagi, które zdefiniowano powyżej. Jeśli nie znaleziono żadnych technik, zwróć pustą listę.
+
+**Przykładowa struktura:**
+{
+    "reasoning": "Tekst stosuje [Nazwa Techniki], ponieważ autor sugeruje, że...",
+    "discovered_techniques": ["NAZWA_TECHNIKI"]
+}
+"""
+
+MODEL_PARAMETERS = {
+    "temperature": 0.1,
+    "stop": ["<|im_end|>"],
+    "num_ctx": 16384,
+}
+
+
+async def _upload_blob(client: httpx.AsyncClient, file_path: str) -> str:
+    """Compute SHA-256 digest of *file_path* and upload it to Ollama.
+
+    If the blob already exists (HTTP 200 from HEAD), the upload is skipped.
+    Returns the digest string in the format ``sha256:<hex>``.
+    """
+    sha256 = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            sha256.update(chunk)
+    digest = f"sha256:{sha256.hexdigest()}"
+    file_size = os.path.getsize(file_path)
+
+    # Check if the blob already exists — skip re-upload for large files.
+    head_resp = await client.head(f"{OLLAMA_API_URL}/api/blobs/{digest}")
+    if head_resp.status_code == 200:
+        logging.info("Blob %s already exists in Ollama, skipping upload", digest[:16])
+        return digest
+
+    logging.info("Uploading blob %s (%d bytes) to Ollama", digest[:16], file_size)
+    with open(file_path, "rb") as f:
+        resp = await client.post(
+            f"{OLLAMA_API_URL}/api/blobs/{digest}",
+            content=f,
+            headers={"Content-Type": "application/octet-stream"},
+        )
+    if resp.status_code not in (200, 201):
+        raise Exception(f"Failed to upload blob {digest[:16]} (HTTP {resp.status_code}): {resp.text[:200]}")
+    return digest
 
 
 def _project_root():
@@ -445,60 +529,78 @@ class MLOpsOrchestrator:
             self.notify()
             return False
 
-        # Create model in Ollama via HTTP API (avoids docker exec overhead and
-        # subprocess timeout; keeps the asyncio event loop responsive).
+        # Create model in Ollama via JSON-based HTTP API.
+        # Ollama v0.5.5+ (Jan 2025) removed Modelfile-based input from
+        # POST /api/create.  The new format requires:
+        #   1. Upload GGUF files as blobs via POST /api/blobs/{digest}
+        #   2. Call POST /api/create with JSON fields (files, adapters,
+        #      template, system, parameters) instead of a Modelfile string.
         try:
             with self._lock:
                 self.status = "deploying"
             self.notify()
 
-            # Read the Modelfile template
-            modelfile_path = os.path.join(_project_root(), "model", "Modelfile")
-            with open(modelfile_path, encoding="utf-8") as f:
-                modelfile_content = f.read()
+            # Resolve paths for the base model and adapter GGUF.
+            # Both containers mount ./model, but at different mount points:
+            #   backend → /app/model/    ollama → /model/
+            # We read files from the backend mount point; the blob upload
+            # sends the raw bytes to Ollama via HTTP, so mount-point
+            # differences don't matter for the upload step.
+            base_model_dir = os.path.join(project_root, "model", "bielik-4.5b-base")
+            base_gguf_filename = None
+            base_gguf_path = None
+            for fname in os.listdir(base_model_dir):
+                if fname.endswith(".gguf"):
+                    base_gguf_filename = fname
+                    base_gguf_path = os.path.join(base_model_dir, fname)
+                    break
+            if not base_gguf_path:
+                raise FileNotFoundError(f"No .gguf file found in {base_model_dir}")
 
-            # Replace local/backend paths with Ollama container paths.
-            # The Ollama container mounts ./model at /model/, while the backend
-            # container mounts it at /app/model/.  All paths in the Modelfile
-            # must use the Ollama mount point (/model/).
-            modelfile_content = modelfile_content.replace("FROM ./", "FROM /model/")
-            # Update ADAPTER path to point to the newly created GGUF file.
-            # Convert backend-container path (/app/model/…) to Ollama-container
-            # path (/model/…) so Ollama can find the file.
-            ollama_gguf_path = found_gguf_path.replace("/app/model/", "/model/")
-            adapter_line = f"ADAPTER {ollama_gguf_path}"
-            modelfile_content = re.sub(r"^ADAPTER\s+\S+", adapter_line, modelfile_content, flags=re.MULTILINE)
+            adapter_gguf_filename = os.path.basename(found_gguf_path)
 
-            log_deploy(f"Creating model in Ollama via HTTP API: {OLLAMA_API_URL}/api/create")
+            async with httpx.AsyncClient(timeout=httpx.Timeout(300.0)) as client:
+                # Phase 1: Upload blobs to Ollama
+                log_deploy(f"Uploading base model blob: {base_gguf_filename}")
+                base_digest = await _upload_blob(client, base_gguf_path)
+                log_deploy(f"Base model digest: {base_digest}")
 
-            # Use Ollama HTTP /api/create endpoint directly — no docker exec,
-            # no subprocess timeout, and the event loop stays responsive.
-            async with httpx.AsyncClient(timeout=httpx.Timeout(300.0)) as client, client.stream(
-                "POST",
-                f"{OLLAMA_API_URL}/api/create",
-                json={
-                    "name": "bielik-lora-mipd",
-                    "modelfile": modelfile_content,
-                    "stream": True,
-                },
-            ) as response:
-                if response.status_code != 200:
-                    body = await response.aread()
-                    raise Exception(
-                        f"Ollama create failed (HTTP {response.status_code}): "
-                        f"{body.decode(errors='replace')}"
-                    )
-                async for line in response.aiter_lines():
-                    if not line.strip():
-                        continue
-                    log_deploy(line)
-                    # Detect errors in the streaming response
-                    try:
-                        chunk = json.loads(line)
-                        if "error" in chunk:
-                            raise Exception(f"Ollama create failed: {chunk['error']}")
-                    except json.JSONDecodeError:
-                        pass
+                log_deploy(f"Uploading adapter blob: {adapter_gguf_filename}")
+                adapter_digest = await _upload_blob(client, found_gguf_path)
+                log_deploy(f"Adapter digest: {adapter_digest}")
+
+                # Phase 2: Create model via JSON-based /api/create
+                log_deploy(f"Creating model {OLLAMA_MODEL_NAME} in Ollama via JSON API")
+
+                async with client.stream(
+                    "POST",
+                    f"{OLLAMA_API_URL}/api/create",
+                    json={
+                        "name": OLLAMA_MODEL_NAME,
+                        "files": {base_gguf_filename: base_digest},
+                        "adapters": {adapter_gguf_filename: adapter_digest},
+                        "template": CHATML_TEMPLATE,
+                        "system": SYSTEM_PROMPT,
+                        "parameters": MODEL_PARAMETERS,
+                        "stream": True,
+                    },
+                ) as response:
+                    if response.status_code != 200:
+                        body = await response.aread()
+                        raise Exception(
+                            f"Ollama create failed (HTTP {response.status_code}): {body.decode(errors='replace')}"
+                        )
+                    async for line in response.aiter_lines():
+                        if not line.strip():
+                            continue
+                        log_deploy(line)
+                        # Detect errors in the streaming response
+                        try:
+                            chunk = json.loads(line)
+                            if "error" in chunk:
+                                raise Exception(f"Ollama create failed: {chunk['error']}")
+                        except json.JSONDecodeError:
+                            pass
 
             with self._lock:
                 self.status = "deployment_success"

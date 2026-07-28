@@ -34,7 +34,6 @@ No manual model creation step is needed. The Ollama container runs an entrypoint
 | `backend_uploads` | `/app/uploads` | Persistent upload storage |
 | `backend_logs` | `/app/logs` | Persistent training logs |
 | `ollama_data` | `/root/.ollama` (Ollama) | Persisted models across restarts |
-| Docker socket | `/var/run/docker.sock` (Backend) | Allows deployment pipeline to recreate Ollama model |
 
 ## GPU Setup
 
@@ -74,9 +73,9 @@ Training runs inside the backend container with GPU access. The training pipelin
 2. Backend launches `python -m app.training.trainer` as a subprocess
 3. Trainer reports progress via HTTP callbacks to `http://backend:8000/training/progress`
 4. After training, benchmark evaluates the adapter
-5. Promote deploys the adapter: backend writes a new `Modelfile.docker` and runs `docker exec ollama-service ollama create` to hot-swap the model
+5. Promote deploys the adapter: backend uploads GGUF files as blobs to Ollama via HTTP, then calls the JSON-based `/api/create` endpoint to hot-swap the model
 
-The deployment step uses Docker CLI (installed in the backend image) with the Docker socket mounted from the host, allowing the backend container to manage the Ollama container's models.
+The deployment step uses Ollama's HTTP API (`POST /api/blobs/:digest` + `POST /api/create` with JSON fields), not Docker CLI. No Docker socket mount is needed for deployment.
 
 ## Troubleshooting
 
@@ -89,7 +88,7 @@ The deployment step uses Docker CLI (installed in the backend image) with the Do
 | WebSocket not connecting | Verify backend started with `--ws websockets` flag |
 | Frontend can't reach backend | Check `BACKEND_URL` in `frontend/src/config.js` |
 | Port already in use | Stop conflicting services or change ports in `docker-compose.yml`. Ollama uses port 11435 on the host to avoid conflict with a local Ollama on 11434 |
-| Deployment (promote) fails | Ensure Docker socket is mounted in backend container and Docker CLI is installed |
+| Deployment (promote) fails | Check `docker compose logs backend` — deployment uses Ollama HTTP API, not Docker CLI |
 
 ## Development vs Production
 

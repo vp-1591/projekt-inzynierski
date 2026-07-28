@@ -453,8 +453,6 @@ def test_deploy_conversion_failure(orch):
     """When the converter subprocess fails, status reverts to 'ready_to_promote'."""
     orch.status = "ready_to_promote"
 
-    # Mock async subprocess: readline returns empty bytes immediately (EOF),
-    # wait() is an async no-op
     mock_proc = MagicMock()
     mock_proc.stdout = MagicMock()
 
@@ -466,7 +464,7 @@ def test_deploy_conversion_failure(orch):
 
     mock_proc.stdout.readline = _readline_empty
     mock_proc.wait = _wait
-    mock_proc.returncode = 1  # Non-zero → conversion failure
+    mock_proc.returncode = 1  # Non-zero -> conversion failure
 
     with (
         patch("asyncio.create_subprocess_exec", return_value=mock_proc),
@@ -502,7 +500,7 @@ def test_deploy_no_gguf_file(orch):
         patch("asyncio.create_subprocess_exec", return_value=mock_proc),
         patch("app.training.orchestrator.os.listdir", return_value=[]),
         patch("app.training.orchestrator.os.path.isfile", return_value=False),
-        patch.object(orch, "notify", MagicMock()),
+        patch("app.training.orchestrator.MLOpsOrchestrator.notify"),
     ):
         result = asyncio.run(orch.deploy_new_adapter("/model/latest"))
 
@@ -560,10 +558,36 @@ def _make_streaming_response(lines, status_code=200):
     return _FakeStreamCM()
 
 
+# ---------------------------------------------------------------------------
+# Helper: set up common patches for deploy tests
+# ---------------------------------------------------------------------------
+
+
+def _deploy_patches(mock_proc, mock_client, isfile_return=None, listdir_return=None):
+    """Return a dict of common patches for deploy_new_adapter tests.
+
+    *isfile_return* controls os.path.isfile return value - defaults to True (GGUF found).
+    *listdir_return* controls os.listdir return value - defaults to listing a .gguf base model.
+    """
+    if listdir_return is None:
+        listdir_return = ["Bielik-4.5B-v3.0-Instruct.Q8_0.gguf"]
+    if isfile_return is None:
+        isfile_return = True
+
+    return {
+        "create_subprocess_exec": patch("asyncio.create_subprocess_exec", return_value=mock_proc),
+        "isfile": patch("app.training.orchestrator.os.path.isfile", return_value=isfile_return),
+        "listdir": patch("app.training.orchestrator.os.listdir", return_value=listdir_return),
+        "httpx_client": patch("app.training.orchestrator.httpx.AsyncClient", return_value=mock_client),
+        "upload_blob": patch("app.training.orchestrator._upload_blob", return_value="sha256:fake_digest"),
+        "notify": patch("app.training.orchestrator.MLOpsOrchestrator.notify"),
+    }
+
+
 @patch("app.training.orchestrator.os.makedirs", MagicMock())
 @patch("builtins.open", mock_open())
 def test_deploy_ollama_api_success(orch):
-    """Successful deployment: conversion + Ollama HTTP /api/create returns 200."""
+    """Successful deployment: conversion + blob upload + Ollama JSON /api/create returns 200."""
     orch.status = "ready_to_promote"
 
     mock_proc = _mock_conversion_ok()
@@ -579,11 +603,14 @@ def test_deploy_ollama_api_success(orch):
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
+    patches = _deploy_patches(mock_proc, mock_client)
     with (
-        patch("asyncio.create_subprocess_exec", return_value=mock_proc),
-        patch("app.training.orchestrator.os.path.isfile", return_value=True),
-        patch("app.training.orchestrator.httpx.AsyncClient", return_value=mock_client),
-        patch.object(orch, "notify", MagicMock()),
+        patches["create_subprocess_exec"],
+        patches["isfile"],
+        patches["listdir"],
+        patches["httpx_client"],
+        patches["upload_blob"],
+        patches["notify"],
     ):
         result = asyncio.run(orch.deploy_new_adapter("/app/model/latest/adapter"))
 
@@ -594,8 +621,60 @@ def test_deploy_ollama_api_success(orch):
 
 @patch("app.training.orchestrator.os.makedirs", MagicMock())
 @patch("builtins.open", mock_open())
+def test_deploy_ollama_api_json_payload(orch):
+    """Verify the /api/create payload uses JSON fields (files, adapters, template, system, parameters)."""
+    orch.status = "ready_to_promote"
+
+    mock_proc = _mock_conversion_ok()
+
+    success_lines = [json_mod.dumps({"status": "success"})]
+    fake_stream = _make_streaming_response(success_lines, status_code=200)
+
+    # Capture the json= kwarg passed to client.stream()
+    captured_kwargs = {}
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    def _capture_stream(method, url, **kwargs):
+        captured_kwargs.update(kwargs)
+        return fake_stream
+
+    mock_client.stream = MagicMock(side_effect=_capture_stream)
+
+    patches = _deploy_patches(mock_proc, mock_client)
+    with (
+        patches["create_subprocess_exec"],
+        patches["isfile"],
+        patches["listdir"],
+        patches["httpx_client"],
+        patches["upload_blob"],
+        patches["notify"],
+    ):
+        result = asyncio.run(orch.deploy_new_adapter("/app/model/latest/adapter"))
+
+    assert result is True
+    # Verify the JSON payload uses the new Ollama v0.5.5+ format
+    payload = captured_kwargs.get("json", {})
+    assert "name" in payload
+    assert "files" in payload
+    assert "adapters" in payload
+    assert "template" in payload
+    assert "system" in payload
+    assert "parameters" in payload
+    # Old Modelfile format must NOT be present
+    assert "modelfile" not in payload
+    # Verify specific fields
+    assert payload["name"] == "bielik-lora-mipd"
+    assert "<|im_start|>system" in payload["template"]
+    assert "REFERENCE_ERROR" in payload["system"]
+    assert payload["parameters"]["temperature"] == 0.1
+
+
+@patch("app.training.orchestrator.os.makedirs", MagicMock())
+@patch("builtins.open", mock_open())
 def test_deploy_ollama_api_http_error(orch):
-    """Ollama HTTP /api/create returns non-200 → deployment error."""
+    """Ollama HTTP /api/create returns non-200 -> deployment error."""
     orch.status = "ready_to_promote"
 
     mock_proc = _mock_conversion_ok()
@@ -607,11 +686,14 @@ def test_deploy_ollama_api_http_error(orch):
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
+    patches = _deploy_patches(mock_proc, mock_client)
     with (
-        patch("asyncio.create_subprocess_exec", return_value=mock_proc),
-        patch("app.training.orchestrator.os.path.isfile", return_value=True),
-        patch("app.training.orchestrator.httpx.AsyncClient", return_value=mock_client),
-        patch.object(orch, "notify", MagicMock()),
+        patches["create_subprocess_exec"],
+        patches["isfile"],
+        patches["listdir"],
+        patches["httpx_client"],
+        patches["upload_blob"],
+        patches["notify"],
     ):
         result = asyncio.run(orch.deploy_new_adapter("/app/model/latest/adapter"))
 
@@ -623,7 +705,7 @@ def test_deploy_ollama_api_http_error(orch):
 @patch("app.training.orchestrator.os.makedirs", MagicMock())
 @patch("builtins.open", mock_open())
 def test_deploy_ollama_api_stream_error(orch):
-    """Ollama /api/create streams an error JSON → deployment error."""
+    """Ollama /api/create streams an error JSON -> deployment error."""
     orch.status = "ready_to_promote"
 
     mock_proc = _mock_conversion_ok()
@@ -639,14 +721,109 @@ def test_deploy_ollama_api_stream_error(orch):
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
 
+    patches = _deploy_patches(mock_proc, mock_client)
     with (
-        patch("asyncio.create_subprocess_exec", return_value=mock_proc),
-        patch("app.training.orchestrator.os.path.isfile", return_value=True),
-        patch("app.training.orchestrator.httpx.AsyncClient", return_value=mock_client),
-        patch.object(orch, "notify", MagicMock()),
+        patches["create_subprocess_exec"],
+        patches["isfile"],
+        patches["listdir"],
+        patches["httpx_client"],
+        patches["upload_blob"],
+        patches["notify"],
     ):
         result = asyncio.run(orch.deploy_new_adapter("/app/model/latest/adapter"))
 
     assert result is False
     assert orch.status == "deployment_error"
     assert orch.last_deployment_status == "deployment_error"
+
+
+@patch("app.training.orchestrator.os.makedirs", MagicMock())
+@patch("builtins.open", mock_open())
+def test_deploy_blob_upload_failure(orch):
+    """When blob upload fails, deployment rolls back to 'deployment_error'."""
+    orch.status = "ready_to_promote"
+
+    mock_proc = _mock_conversion_ok()
+
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    patches = _deploy_patches(mock_proc, mock_client)
+    # Override the upload_blob patch to raise
+    with (
+        patches["create_subprocess_exec"],
+        patches["isfile"],
+        patches["listdir"],
+        patches["httpx_client"],
+        patch("app.training.orchestrator._upload_blob", side_effect=Exception("Blob upload failed: HTTP 500")),
+        patches["notify"],
+    ):
+        result = asyncio.run(orch.deploy_new_adapter("/app/model/latest/adapter"))
+
+    assert result is False
+    assert orch.status == "deployment_error"
+    assert orch.last_deployment_status == "deployment_error"
+
+
+@patch("app.training.orchestrator.os.makedirs", MagicMock())
+@patch("builtins.open", mock_open())
+def test_deploy_no_base_gguf_file(orch):
+    """When no .gguf base model is found in the model dir, deployment fails."""
+    orch.status = "ready_to_promote"
+
+    mock_proc = _mock_conversion_ok()
+
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    patches = _deploy_patches(mock_proc, mock_client, listdir_return=["not_a_gguf.txt"])
+    with (
+        patches["create_subprocess_exec"],
+        patches["isfile"],
+        patches["listdir"],
+        patches["httpx_client"],
+        patches["upload_blob"],
+        patches["notify"],
+    ):
+        result = asyncio.run(orch.deploy_new_adapter("/app/model/latest/adapter"))
+
+    assert result is False
+    assert orch.status == "deployment_error"
+
+
+@patch("app.training.orchestrator.os.makedirs", MagicMock())
+@patch("builtins.open", mock_open())
+def test_deploy_blob_already_exists_skips_upload(orch):
+    """When blob already exists in Ollama (HEAD 200), upload is skipped but deployment succeeds."""
+    orch.status = "ready_to_promote"
+
+    mock_proc = _mock_conversion_ok()
+
+    success_lines = [json_mod.dumps({"status": "success"})]
+    fake_stream = _make_streaming_response(success_lines, status_code=200)
+
+    mock_client = MagicMock()
+    mock_client.stream = MagicMock(return_value=fake_stream)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    # _upload_blob returns digest directly - HEAD 200 is handled inside _upload_blob
+    async def _fake_upload_blob(client, file_path):
+        return "sha256:already_exists_digest"
+
+    patches = _deploy_patches(mock_proc, mock_client)
+    with (
+        patches["create_subprocess_exec"],
+        patches["isfile"],
+        patches["listdir"],
+        patches["httpx_client"],
+        patch("app.training.orchestrator._upload_blob", side_effect=_fake_upload_blob),
+        patches["notify"],
+    ):
+        result = asyncio.run(orch.deploy_new_adapter("/app/model/latest/adapter"))
+
+    assert result is True
+    assert orch.status == "deployment_success"
+    assert orch.last_deployment_status == "deployment_success"
