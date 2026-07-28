@@ -23,6 +23,7 @@ _mock_modules = [
     "datasets",
     "trl",
     "transformers",
+    "requests",
 ]
 
 for _name in _mock_modules:

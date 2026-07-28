@@ -32,7 +32,5 @@ try:
 except Exception as e:
     import logging
 
-    logging.getLogger(__name__).critical(
-        "Failed to initialize database at %s: %s", DATABASE_PATH, e
-    )
+    logging.getLogger(__name__).critical("Failed to initialize database at %s: %s", DATABASE_PATH, e)
     raise

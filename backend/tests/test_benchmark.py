@@ -13,7 +13,7 @@ import pytest
 # The benchmark module imports heavy training dependencies (torch, unsloth, datasets,
 # tqdm) at module level. These are not available in the lightweight dev venv and are
 # not needed for the functions under test. Mock them before importing the module.
-for _mod in ("torch", "unsloth", "unsloth.FastLanguageModel", "datasets", "tqdm", "tqdm.auto", "tqdm.auto.tqdm"):
+for _mod in ("torch", "unsloth", "unsloth.FastLanguageModel", "datasets", "tqdm", "tqdm.auto", "tqdm.auto.tqdm", "requests"):
     if _mod not in sys.modules:
         sys.modules[_mod] = MagicMock()
 
