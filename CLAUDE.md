@@ -74,6 +74,10 @@ Frontend (React/Vite :5173)
 
 - **Training runs inside the Docker backend container** (Linux, GPU passthrough). The Dockerfile installs both runtime and training dependencies. For local development without Docker, training requires WSL2 (Unsloth requires Linux). The backend detects `os.name == 'nt'` and warns. The `ProgressCallback` in trainer.py POSTs progress back to the backend at `{BACKEND_URL}/training/progress` (default `http://localhost:8000`, overridden to `http://backend:8000` in Docker).
 
+- **Unsloth tokenizer pickling constraint** (`backend/app/training/trainer.py`): The Unsloth tokenizer contains `ConfigModuleInstance` objects that `dill` cannot pickle. This means `Dataset.map(num_proc=N)` for any `N > 1` will crash. The module-level monkey-patch at the top of `trainer.py` forces `num_proc=None` (single-process) for all `Dataset.map()` calls. Do NOT set `dataset_num_proc` in `SFTConfig` — Unsloth's compiled trainer overrides it anyway. See commit `c0af1e5` for the original `TrainingArguments` pickle fix.
+
+- **Ollama deployment path mapping**: In Docker, the backend container mounts `./model` at `/app/model/` while the Ollama container mounts it at `/model/`. The orchestrator's `deploy_new_adapter()` rewrites Modelfile paths from backend paths to Ollama paths before running `ollama create`. The GGUF adapter file must have a `.gguf` extension — Ollama's `ADAPTER` directive requires it.
+
 - **Baseline metrics** are read from `model/benchmark-reports/current_baseline_report.txt` via regex parsing in `orchestrator.py`.
 
 ## Environment

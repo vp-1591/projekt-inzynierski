@@ -157,6 +157,9 @@ def main():
     dataset = dataset.shuffle(seed=42).select(range(min(args.num_samples, len(dataset))))
 
     # Process Prompts and Run Inference
+    # NOTE: Do not add num_proc>1 here — the Unsloth tokenizer contains
+    # ConfigModuleInstance objects that cannot be pickled by dill.
+    # See trainer.py for details.
     dataset = dataset.map(lambda x: format_prompt(x, tokenizer))
     results = []
 

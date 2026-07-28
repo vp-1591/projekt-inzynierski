@@ -41,8 +41,9 @@ FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-# Install only Docker CLI (no build tools) for Ollama model hot-swap
+# Install Docker CLI + gcc/g++ (needed by Triton for JIT GPU kernel compilation)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ \
     ca-certificates gnupg curl \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg \

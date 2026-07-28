@@ -374,7 +374,7 @@ class MLOpsOrchestrator:
             "--base",
             base_model_path,
             "--output",
-            f"{adapter_path}_gguf",
+            f"{adapter_path}.gguf",
             "--quant_method",
             "q4_k_m",
         ]
@@ -410,24 +410,32 @@ class MLOpsOrchestrator:
             return False
 
         # --- Phase 2: Hot-Swap ---
-        gguf_output_dir = adapter_path.rstrip("/") + "_gguf"
+        # The converter writes a single .gguf file (not a directory).
+        gguf_path = adapter_path.rstrip("/") + ".gguf"
 
         found_gguf_path = None
-        if os.path.isfile(gguf_output_dir):
-            found_gguf_path = gguf_output_dir
+        if os.path.isfile(gguf_path):
+            found_gguf_path = gguf_path
         else:
-            try:
-                for file in os.listdir(gguf_output_dir):
-                    if file.endswith(".gguf") or file.endswith("gguf"):
-                        found_gguf_path = os.path.join(gguf_output_dir, file)
-                        break
-            except Exception as e:
-                print(f"GGUF access error: {e}")
-                with self._lock:
-                    self.last_deployment_status = "deployment_error"
-                    self.status = "ready_to_promote"
-                self.notify()
-                return False
+            # Fallback: older runs may have used the _gguf suffix without extension
+            legacy_path = adapter_path.rstrip("/") + "_gguf"
+            if os.path.isfile(legacy_path):
+                found_gguf_path = legacy_path
+            else:
+                # Last resort: search for any .gguf file in the adapter directory
+                try:
+                    adapter_dir = os.path.dirname(adapter_path)
+                    for file in os.listdir(adapter_dir):
+                        if file.endswith(".gguf"):
+                            found_gguf_path = os.path.join(adapter_dir, file)
+                            break
+                except Exception as e:
+                    print(f"GGUF access error: {e}")
+                    with self._lock:
+                        self.last_deployment_status = "deployment_error"
+                        self.status = "ready_to_promote"
+                    self.notify()
+                    return False
 
         if not found_gguf_path:
             with self._lock:
@@ -447,10 +455,16 @@ class MLOpsOrchestrator:
             with open(modelfile_path, encoding="utf-8") as f:
                 modelfile_content = f.read()
 
-            # Replace local paths with container paths
+            # Replace local/backend paths with Ollama container paths.
+            # The Ollama container mounts ./model at /model/, while the backend
+            # container mounts it at /app/model/.  All paths in the Modelfile
+            # must use the Ollama mount point (/model/).
             modelfile_content = modelfile_content.replace("FROM ./", "FROM /model/")
-            # Update ADAPTER path to point to the newly created GGUF file
-            adapter_line = f"ADAPTER {found_gguf_path}"
+            # Update ADAPTER path to point to the newly created GGUF file.
+            # Convert backend-container path (/app/model/…) to Ollama-container
+            # path (/model/…) so Ollama can find the file.
+            ollama_gguf_path = found_gguf_path.replace("/app/model/", "/model/")
+            adapter_line = f"ADAPTER {ollama_gguf_path}"
             modelfile_content = re.sub(r"^ADAPTER\s+\S+", adapter_line, modelfile_content, flags=re.MULTILINE)
 
             # Write a temporary Modelfile with container paths for ollama create

@@ -1,6 +1,10 @@
 import os
 
 os.environ["UNSLOTH_DISABLE_STATISTICS"] = "1"
+os.environ["UNSLOTH_RETURN_LOGITS"] = "1"  # TRL's compute_loss calls entropy_from_logits(outputs.logits)
+# which needs real logits tensors. Without this, Unsloth returns EMPTY_LOGITS (a
+# sentinel whose __getattr__ returns function refs instead of raising), causing
+# TypeError: 'function' object is not subscriptable on logits.shape[:-1].
 os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
@@ -9,10 +13,27 @@ import sys
 
 import requests
 import torch
-from datasets import load_dataset
+from datasets import Dataset, load_dataset
 from transformers import TrainerCallback
 from trl import SFTConfig, SFTTrainer
 from unsloth import FastLanguageModel
+
+# Monkey-patch Dataset.map to force num_proc=None (single-process).
+# Unsloth's compiled SFTTrainer auto-computes dataset_num_proc (e.g. 4 on our
+# container) and passes it to datasets.map(), which uses multiprocess/dill for
+# serialization. The Unsloth tokenizer contains ConfigModuleInstance objects
+# that dill cannot pickle, causing TypeError. Setting dataset_num_proc=1 in
+# SFTConfig is NOT enough — Unsloth's __init__ overrides it. The only reliable
+# fix is to intercept at the Dataset.map level. See Unsloth Issue #4490.
+_original_dataset_map = Dataset.map
+
+
+def _safe_map(self, *args, **kwargs):
+    kwargs["num_proc"] = None
+    return _original_dataset_map(self, *args, **kwargs)
+
+
+Dataset.map = _safe_map
 
 
 class ProgressCallback(TrainerCallback):
@@ -111,32 +132,37 @@ class ModelTrainer:
 
         formatting_func = functools.partial(format_training_example, tokenizer=tokenizer)
 
+        # dataset_num_proc is handled by the Dataset.map monkey-patch at module
+        # level (see top of file). Setting it here in SFTConfig has no effect —
+        # Unsloth's compiled trainer auto-computes and overrides it. See commit
+        # c0af1e5 for the related TrainingArguments pickle fix.
+        sft_config = SFTConfig(
+            dataset_text_field="text",
+            max_length=max_seq_length,
+            packing=False,
+            per_device_train_batch_size=1,
+            gradient_accumulation_steps=4,
+            warmup_steps=5,
+            gradient_checkpointing=True,
+            num_train_epochs=2,
+            learning_rate=2e-4,
+            fp16=not torch.cuda.is_bf16_supported(),
+            bf16=torch.cuda.is_bf16_supported(),
+            logging_steps=1,
+            optim="paged_adamw_8bit",
+            weight_decay=0.01,
+            lr_scheduler_type="linear",
+            seed=3407,
+            output_dir=self.output_dir,
+        )
+
         # Configure SFT Trainer
         trainer = SFTTrainer(
             model=model,
             processing_class=tokenizer,
             train_dataset=dataset,
             formatting_func=formatting_func,
-            args=SFTConfig(
-                dataset_text_field="text",
-                max_length=max_seq_length,
-                dataset_num_proc=2,
-                packing=False,
-                per_device_train_batch_size=1,
-                gradient_accumulation_steps=4,
-                warmup_steps=5,
-                gradient_checkpointing=True,
-                num_train_epochs=2,
-                learning_rate=2e-4,
-                fp16=not torch.cuda.is_bf16_supported(),
-                bf16=torch.cuda.is_bf16_supported(),
-                logging_steps=1,
-                optim="paged_adamw_8bit",
-                weight_decay=0.01,
-                lr_scheduler_type="linear",
-                seed=3407,
-                output_dir=self.output_dir,
-            ),
+            args=sft_config,
             callbacks=[ProgressCallback(backend_url)],
         )
 
