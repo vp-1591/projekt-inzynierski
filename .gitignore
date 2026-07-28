@@ -39,7 +39,6 @@ backend/tests/pytest-cache-files-*/
 .venv/
 .venv-wsl/
 /unsloth_compiled_cache
-.claude/*
 !.claude/hooks/
 !.claude/hooks/PreToolUse
 _thesis_build
