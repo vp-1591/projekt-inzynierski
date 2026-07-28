@@ -57,7 +57,7 @@ flowchart LR
   PROC -- "healed JSON" --> UI
   API -- "training status WS" --> UI
   ORCH -- "upload/train/promote" --> API
-  ORCH -- "deploy via Ollama CLI" --> LLM
+  ORCH -- "deploy via Ollama API" --> LLM
   ORCH -- "TrainingRun records" --> DB
   ORCH -- "adapters + datasets" --> MODEL
 ```
@@ -65,7 +65,7 @@ flowchart LR
 ### Key flows
 
 - **Analysis:** Frontend → `/analyze` → Ollama `/api/chat` → LLM → `normalize_llm_response()` (3-phase healing: JSON parse → schema normalization → tag validation) → structured result
-- **MLOps pipeline:** Upload `.jsonl` → trainer.py (Unsloth SFT) → benchmark.py → converter.py (HF→GGUF) → hot-swap via Ollama CLI. Progress via callbacks → WebSocket broadcast.
+- **MLOps pipeline:** Upload `.jsonl` → trainer.py (Unsloth SFT) → benchmark.py → converter.py (HF→GGUF) → hot-swap via Ollama HTTP API (`/api/create`). Progress via callbacks → WebSocket broadcast.
 
 ## Key Design Decisions
 
@@ -79,7 +79,7 @@ flowchart LR
 
 - **Unsloth tokenizer pickling** (`trainer.py`): `Dataset.map(num_proc=N)` crashes for `N > 1` due to `ConfigModuleInstance`. Module-level monkey-patch forces `num_proc=None`. Do NOT set `dataset_num_proc` in `SFTConfig`.
 
-- **Ollama deployment path mapping**: Backend mounts `./model` at `/app/model/`, Ollama at `/model/`. `deploy_new_adapter()` rewrites Modelfile paths accordingly. GGUF adapter must have `.gguf` extension.
+- **Ollama deployment via HTTP API**: `deploy_new_adapter()` calls Ollama `/api/create` via `httpx.AsyncClient.stream()` with 300s timeout, sending Modelfile content in the request body. Path rewriting maps `/app/model/` → `/model/` for the Ollama container. GGUF adapter must have `.gguf` extension. Streaming NDJSON responses are parsed for error detection.
 
 - **Baseline metrics** read from `model/benchmark-reports/current_baseline_report.txt` via regex in `orchestrator.py`.
 

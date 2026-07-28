@@ -6,8 +6,9 @@ deploy_new_adapter — all without a real database or subprocess.
 """
 
 import asyncio
+import json as json_mod
 import threading
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
 from conftest import DummyDB
@@ -507,4 +508,145 @@ def test_deploy_no_gguf_file(orch):
 
     assert result is False
     assert orch.status == "ready_to_promote"
+    assert orch.last_deployment_status == "deployment_error"
+
+
+# ---------------------------------------------------------------------------
+# Helper: mock conversion subprocess (Phase 1 success)
+# ---------------------------------------------------------------------------
+
+
+def _mock_conversion_ok():
+    """Return a mock async subprocess that simulates successful GGUF conversion."""
+    mock_proc = MagicMock()
+    mock_proc.stdout = MagicMock()
+
+    async def _readline_empty():
+        return b""
+
+    async def _wait():
+        pass
+
+    mock_proc.stdout.readline = _readline_empty
+    mock_proc.wait = _wait
+    mock_proc.returncode = 0
+    return mock_proc
+
+
+def _make_streaming_response(lines, status_code=200):
+    """Create an async context manager that yields an httpx streaming response.
+
+    *lines* is a list of JSON-encodable dicts that will be streamed back.
+    """
+
+    class _FakeStreamResponse:
+        def __init__(self):
+            self.status_code = status_code
+
+        async def aiter_lines(self):
+            for line in lines:
+                yield line
+
+        async def aread(self):
+            return b""
+
+    class _FakeStreamCM:
+        async def __aenter__(self):
+            return _FakeStreamResponse()
+
+        async def __aexit__(self, *args):
+            pass
+
+    return _FakeStreamCM()
+
+
+@patch("app.training.orchestrator.os.makedirs", MagicMock())
+@patch("builtins.open", mock_open())
+def test_deploy_ollama_api_success(orch):
+    """Successful deployment: conversion + Ollama HTTP /api/create returns 200."""
+    orch.status = "ready_to_promote"
+
+    mock_proc = _mock_conversion_ok()
+
+    success_lines = [
+        json_mod.dumps({"status": "creating model"}),
+        json_mod.dumps({"status": "success"}),
+    ]
+    fake_stream = _make_streaming_response(success_lines, status_code=200)
+
+    mock_client = MagicMock()
+    mock_client.stream = MagicMock(return_value=fake_stream)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    with (
+        patch("asyncio.create_subprocess_exec", return_value=mock_proc),
+        patch("app.training.orchestrator.os.path.isfile", return_value=True),
+        patch("app.training.orchestrator.httpx.AsyncClient", return_value=mock_client),
+        patch.object(orch, "notify", MagicMock()),
+    ):
+        result = asyncio.run(orch.deploy_new_adapter("/app/model/latest/adapter"))
+
+    assert result is True
+    assert orch.status == "deployment_success"
+    assert orch.last_deployment_status == "deployment_success"
+
+
+@patch("app.training.orchestrator.os.makedirs", MagicMock())
+@patch("builtins.open", mock_open())
+def test_deploy_ollama_api_http_error(orch):
+    """Ollama HTTP /api/create returns non-200 → deployment error."""
+    orch.status = "ready_to_promote"
+
+    mock_proc = _mock_conversion_ok()
+
+    fake_stream = _make_streaming_response([], status_code=500)
+
+    mock_client = MagicMock()
+    mock_client.stream = MagicMock(return_value=fake_stream)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    with (
+        patch("asyncio.create_subprocess_exec", return_value=mock_proc),
+        patch("app.training.orchestrator.os.path.isfile", return_value=True),
+        patch("app.training.orchestrator.httpx.AsyncClient", return_value=mock_client),
+        patch.object(orch, "notify", MagicMock()),
+    ):
+        result = asyncio.run(orch.deploy_new_adapter("/app/model/latest/adapter"))
+
+    assert result is False
+    assert orch.status == "deployment_error"
+    assert orch.last_deployment_status == "deployment_error"
+
+
+@patch("app.training.orchestrator.os.makedirs", MagicMock())
+@patch("builtins.open", mock_open())
+def test_deploy_ollama_api_stream_error(orch):
+    """Ollama /api/create streams an error JSON → deployment error."""
+    orch.status = "ready_to_promote"
+
+    mock_proc = _mock_conversion_ok()
+
+    error_lines = [
+        json_mod.dumps({"status": "creating model"}),
+        json_mod.dumps({"error": "quantization failed: out of memory"}),
+    ]
+    fake_stream = _make_streaming_response(error_lines, status_code=200)
+
+    mock_client = MagicMock()
+    mock_client.stream = MagicMock(return_value=fake_stream)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    with (
+        patch("asyncio.create_subprocess_exec", return_value=mock_proc),
+        patch("app.training.orchestrator.os.path.isfile", return_value=True),
+        patch("app.training.orchestrator.httpx.AsyncClient", return_value=mock_client),
+        patch.object(orch, "notify", MagicMock()),
+    ):
+        result = asyncio.run(orch.deploy_new_adapter("/app/model/latest/adapter"))
+
+    assert result is False
+    assert orch.status == "deployment_error"
     assert orch.last_deployment_status == "deployment_error"

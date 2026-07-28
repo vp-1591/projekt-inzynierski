@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import re
@@ -8,6 +9,7 @@ import sys
 import threading
 from datetime import datetime
 
+import httpx
 from sqlalchemy.orm import Session
 
 from ..db import database
@@ -18,7 +20,6 @@ BACKEND_PORT = int(os.getenv("BACKEND_PORT", "8000"))
 BACKEND_URL = f"http://{BACKEND_HOST}:{BACKEND_PORT}"
 
 OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://ollama:11434")
-OLLAMA_CONTAINER = os.getenv("OLLAMA_CONTAINER", "ollama-service")
 
 
 def _project_root():
@@ -444,7 +445,8 @@ class MLOpsOrchestrator:
             self.notify()
             return False
 
-        # Create model in Ollama
+        # Create model in Ollama via HTTP API (avoids docker exec overhead and
+        # subprocess timeout; keeps the asyncio event loop responsive).
         try:
             with self._lock:
                 self.status = "deploying"
@@ -467,25 +469,36 @@ class MLOpsOrchestrator:
             adapter_line = f"ADAPTER {ollama_gguf_path}"
             modelfile_content = re.sub(r"^ADAPTER\s+\S+", adapter_line, modelfile_content, flags=re.MULTILINE)
 
-            # Write a temporary Modelfile with container paths for ollama create
-            docker_modelfile_path = os.path.join(_project_root(), "model", "Modelfile.docker")
-            with open(docker_modelfile_path, "w", encoding="utf-8") as f:
-                f.write(modelfile_content)
+            log_deploy(f"Creating model in Ollama via HTTP API: {OLLAMA_API_URL}/api/create")
 
-            # Use ollama create via Docker CLI (files are volume-mounted in the container)
-            create_cmd = [
-                "docker",
-                "exec",
-                OLLAMA_CONTAINER,
-                "ollama",
-                "create",
-                "bielik-lora-mipd",
-                "-f",
-                "/model/Modelfile.docker",
-            ]
-            result = subprocess.run(create_cmd, capture_output=True, text=True, encoding="utf-8", timeout=120)
-            if result.returncode != 0:
-                raise Exception(f"Ollama create failed: {result.stderr}")
+            # Use Ollama HTTP /api/create endpoint directly — no docker exec,
+            # no subprocess timeout, and the event loop stays responsive.
+            async with httpx.AsyncClient(timeout=httpx.Timeout(300.0)) as client, client.stream(
+                "POST",
+                f"{OLLAMA_API_URL}/api/create",
+                json={
+                    "name": "bielik-lora-mipd",
+                    "modelfile": modelfile_content,
+                    "stream": True,
+                },
+            ) as response:
+                if response.status_code != 200:
+                    body = await response.aread()
+                    raise Exception(
+                        f"Ollama create failed (HTTP {response.status_code}): "
+                        f"{body.decode(errors='replace')}"
+                    )
+                async for line in response.aiter_lines():
+                    if not line.strip():
+                        continue
+                    log_deploy(line)
+                    # Detect errors in the streaming response
+                    try:
+                        chunk = json.loads(line)
+                        if "error" in chunk:
+                            raise Exception(f"Ollama create failed: {chunk['error']}")
+                    except json.JSONDecodeError:
+                        pass
 
             with self._lock:
                 self.status = "deployment_success"
@@ -498,6 +511,7 @@ class MLOpsOrchestrator:
                     run.end_time = datetime.utcnow()
                     self.db.commit()
         except Exception as e:
+            log_deploy(f"Ollama hot-swap failed: {e}")
             print(f"Ollama hot-swap failed: {e}")
             with self._lock:
                 self.status = "deployment_error"
