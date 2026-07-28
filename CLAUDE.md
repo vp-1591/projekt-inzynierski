@@ -94,8 +94,8 @@ flowchart LR
 
 Entire UI and system prompts are in Polish. Technique names are Polish translations (e.g., `STRAWMAN` → "Chochoł (Słomiana kukła)").
 
-## Git Commits
+## User Language
 
-Do not add "Co-Authored-By: Claude ..." or any AI attribution lines to commit messages.
+Respond in the same language as user query. Default: English.
 
 @~/.claude/shared/adr-workflow.md
