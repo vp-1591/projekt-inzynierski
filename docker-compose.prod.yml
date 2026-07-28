@@ -7,6 +7,12 @@
 
 services:
   backend:
+    build:
+      target: runtime
+    # Production: no --reload, no debugpy
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--ws", "websockets"]
+    ports: !override
+      - "8000:8000"
     # Remove dev source mount — keep only data volumes and Docker socket
     volumes: !override
       - ./model:/app/model

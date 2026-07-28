@@ -8,7 +8,13 @@ Polish-language disinformation detection system using Explainable AI (XAI). Iden
 
 ## Commands
 
-**Start all services (Docker):** `docker compose up` — launches Ollama, backend, and frontend in containers. See [DOCKER.md](DOCKER.md) for details.
+**Start all services (Docker, dev mode with hot-reload):** `docker compose up` — launches Ollama, backend (with `--reload`), and frontend (with Vite HMR). Code changes to `backend/app/**/*.py` auto-reload uvicorn — no rebuild needed. See [DOCKER.md](DOCKER.md) for details.
+
+**Rebuild only when:** `requirements.txt`, `requirements-wsl.txt`, or `Dockerfile` changes → `docker compose build backend`
+
+**Production build:** `docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build`
+
+**Remote debugging:** Port 5678 is exposed for debugpy. Attach VS Code "Python: Remote Attach" to `localhost:5678`.
 
 **Manual start (without Docker):**
 

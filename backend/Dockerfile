@@ -68,5 +68,20 @@ COPY . .
 EXPOSE 8000
 
 # --ws websockets is required for WebSocket support
-# --reload removed for production; add back for dev: CMD ["python", "-m", "uvicorn", ... "--reload"]
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--ws", "websockets"]
+
+# ============================================================
+# Stage 3: Dev — hot-reload + remote debugging
+# Decision: docs/adr/0001-docker-dev-env-hot-reload.md
+# ============================================================
+FROM runtime AS dev
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir debugpy watchfiles
+
+EXPOSE 8000 5678
+
+# --reload watches for source changes; --reload-dir limits watching to app code only.
+# debugpy listens on 5678 for optional remote debugging (no --wait-for-client).
+ENV PYTHONUNBUFFERED=1
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--ws", "websockets", "--reload", "--reload-dir", "/app/app"]

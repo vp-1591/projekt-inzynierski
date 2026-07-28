@@ -97,7 +97,25 @@ The deployment step uses Docker CLI (installed in the backend image) with the Do
 ```bash
 docker compose up
 ```
-The `docker-compose.yml` targets the `dev` stage of the frontend Dockerfile, which runs Vite's dev server on port 5173. The backend runs uvicorn with source mounted at `/app`.
+The backend runs with `--reload`, so changes to `backend/app/**/*.py` are picked up automatically by uvicorn — **no rebuild or restart needed**. The frontend uses Vite's hot module replacement (HMR).
+
+Port `5678` is exposed for remote debugging with debugpy (e.g., VS Code "Python: Remote Attach"). The debugger is optional — the backend starts immediately whether or not a debugger is attached.
+
+**When a rebuild IS needed:**
+- `requirements.txt` or `requirements-wsl.txt` changes → `docker compose build backend`
+- `Dockerfile` changes → `docker compose build backend`
+- Adding system-level dependencies → `docker compose build backend`
+
+**When NO rebuild is needed:**
+- Any change to Python files under `backend/app/`
+- Any change to frontend source under `frontend/src/`
+- Adding/modifying model files under `model/`
+
+**Remote debugging (VS Code):**
+1. Start the stack: `docker compose up`
+2. In VS Code, run the "Python: Remote Attach" launch configuration (host: `localhost`, port: `5678`)
+3. Set breakpoints in `backend/app/` files
+4. The debugger attaches to the running uvicorn process
 
 **Production** — optimized builds with no source mounts:
 ```bash
@@ -107,6 +125,7 @@ The production override:
 - Builds the frontend as static assets served by nginx on port 80 (SPA + reverse proxy to backend)
 - Removes source volume mounts (image contains built assets)
 - Sets `VITE_BACKEND_URL=/api` so the frontend uses nginx as a reverse proxy
+- Uses the `runtime` backend stage (no debugpy, no `--reload`)
 
 The frontend Dockerfile has three stages:
 1. **dev** — Node dev server with hot reload (used by docker-compose)
@@ -116,5 +135,6 @@ The frontend Dockerfile has three stages:
 The backend Dockerfile uses a multi-stage build:
 1. **builder** — Installs all Python dependencies with gcc/g++ and Docker CLI
 2. **runtime** — Copies only installed packages and Docker CLI (no build tools), reducing image size by ~200 MB
+3. **dev** — Extends `runtime` with `debugpy` and `watchfiles`; runs uvicorn with `--reload` (used by docker-compose)
 
 Both Dockerfiles use BuildKit cache mounts (`--mount=type=cache`) for pip and npm downloads, which persist across builds without bloating the image.

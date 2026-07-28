@@ -30,12 +30,18 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: dev
     container_name: backend-service
+    # Decision: docs/adr/0001-docker-dev-env-hot-reload.md
+    # --reload enables hot-reload; --reload-dir limits watching to app code only.
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--ws", "websockets", "--reload", "--reload-dir", "/app/app"]
     ports:
       - "8000:8000"
+      - "5678:5678"  # debugpy remote debugging
     environment:
       - OLLAMA_URL=http://ollama:11434/api/chat
       - OLLAMA_API_URL=http://ollama:11434
+      - PYTHONUNBUFFERED=1
       - BACKEND_HOST=backend
       - BACKEND_PORT=8000
     volumes:
@@ -47,6 +53,12 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     deploy:
       resources:
         reservations:
