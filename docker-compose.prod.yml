@@ -13,12 +13,11 @@ services:
     command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--ws", "websockets"]
     ports: !override
       - "8000:8000"
-    # Remove dev source mount — keep only data volumes and Docker socket
+    # Remove dev source mount — keep only data volumes
     volumes: !override
       - ./model:/app/model
       - backend_uploads:/app/uploads
       - backend_logs:/app/logs
-      - /var/run/docker.sock:/var/run/docker.sock
 
   frontend:
     build:

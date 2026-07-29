@@ -132,8 +132,8 @@ The frontend Dockerfile has three stages:
 3. **production** — nginx:alpine serves static assets and proxies `/api/` and `/ws/` to the backend
 
 The backend Dockerfile uses a multi-stage build:
-1. **builder** — Installs all Python dependencies with gcc/g++ and Docker CLI
-2. **runtime** — Copies only installed packages and Docker CLI (no build tools), reducing image size by ~200 MB
+1. **builder** — Installs all Python dependencies with gcc/g++
+2. **runtime** — Copies only installed packages (no build tools), reducing image size by ~200 MB
 3. **dev** — Extends `runtime` with `debugpy` and `watchfiles`; runs uvicorn with `--reload` (used by docker-compose)
 
 Both Dockerfiles use BuildKit cache mounts (`--mount=type=cache`) for pip and npm downloads, which persist across builds without bloating the image.
