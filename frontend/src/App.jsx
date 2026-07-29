@@ -48,6 +48,7 @@ function App() {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          if (data.type === 'heartbeat') return;  // Ignore server keepalive pings
           setTrainingStatus(data);
         } catch {
           setWsError('Otrzymano nieprawidłowe dane z serwera');

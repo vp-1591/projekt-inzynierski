@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -5,6 +6,7 @@ import os
 import httpx
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -30,10 +32,14 @@ MODEL_NAME = "bielik-lora-mipd:latest"
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
+        self._heartbeat_task: asyncio.Task | None = None
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
+        # Start heartbeat if not already running
+        if self._heartbeat_task is None or self._heartbeat_task.done():
+            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
@@ -49,6 +55,15 @@ class ConnectionManager:
         for conn in dead_connections:
             if conn in self.active_connections:
                 self.active_connections.remove(conn)
+
+    async def _heartbeat_loop(self):
+        """Send periodic pings to keep WebSocket connections alive during long deployments."""
+        try:
+            while self.active_connections:
+                await asyncio.sleep(25)
+                await self.broadcast({"type": "heartbeat"})
+        except asyncio.CancelledError:
+            pass
 
 
 manager = ConnectionManager()
@@ -113,8 +128,6 @@ async def get_orchestrator(db: Session = Depends(get_db)):  # noqa: B008
     if orchestrator_instance is None:
         orchestrator_instance = MLOpsOrchestrator(db)
         # Register a bridge between Orchestrator and WebSocket broadcast
-        import asyncio
-
         main_loop = asyncio.get_running_loop()
 
         def ws_notify_bridge(status):
@@ -197,12 +210,21 @@ async def websocket_training_status(websocket: WebSocket, orchestrator: MLOpsOrc
 
 @app.post("/training/promote")
 async def promote_model(orchestrator: MLOpsOrchestrator = Depends(get_orchestrator)):  # noqa: B008
-    """Deploys the latest successfully trained adapter to the production inference path."""
+    """Deploys the latest successfully trained adapter to the production inference path.
+
+    Returns 202 Accepted immediately; deployment proceeds in the background.
+    The client receives completion/failure status via the WebSocket.
+    """
     if orchestrator.status != "ready_to_promote":
         raise HTTPException(status_code=400, detail="Not ready to promote")
 
-    await orchestrator.deploy_new_adapter(orchestrator.latest_adapter_path)
-    return {"status": "promoted"}
+    adapter_path = orchestrator.latest_adapter_path
+
+    async def _run_deployment():
+        await orchestrator.deploy_new_adapter(adapter_path)
+
+    asyncio.create_task(_run_deployment())
+    return JSONResponse(status_code=202, content={"status": "deployment_started"})
 
 
 @app.post("/training/progress")

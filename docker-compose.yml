@@ -2,6 +2,7 @@ services:
   ollama:
     image: ollama/ollama:0.32.4
     container_name: ollama-service
+    restart: unless-stopped
     entrypoint: ["/bin/sh", "/model/ollama-entrypoint.sh"]
     ports:
       - "11435:11434"
@@ -31,6 +32,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       target: dev
+    restart: unless-stopped
     container_name: backend-service
     # Decision: docs/adr/0001-docker-dev-env-hot-reload.md
     # --reload enables hot-reload; --reload-dir limits watching to app code only.
@@ -73,6 +75,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       target: dev
+    restart: unless-stopped
     container_name: frontend-service
     ports:
       - "5173:5173"

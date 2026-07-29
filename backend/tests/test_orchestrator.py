@@ -10,11 +10,12 @@ import json as json_mod
 import threading
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
+import httpx
 import pytest
 from conftest import DummyDB
 
 from app.training import orchestrator as orchestrator_module  # noqa: E402
-from app.training.orchestrator import MLOpsOrchestrator  # noqa: E402
+from app.training.orchestrator import MLOpsOrchestrator, _compute_sha256, _upload_blob  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -827,3 +828,113 @@ def test_deploy_blob_already_exists_skips_upload(orch):
     assert result is True
     assert orch.status == "deployment_success"
     assert orch.last_deployment_status == "deployment_success"
+
+
+# ---------------------------------------------------------------------------
+# Tests for _upload_blob helper
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def sample_file(tmp_path):
+    """Create a temporary file with known content for blob upload tests."""
+    p = tmp_path / "test_model.gguf"
+    p.write_bytes(b"\x00\x01\x02" * 100)
+    return str(p)
+
+
+def test_upload_blob_streams_file_content(sample_file):
+    """_upload_blob streams file content via an async generator to avoid
+    loading multi-GB blobs entirely into memory.
+
+    The content passed to AsyncClient.post() must be an async generator
+    (AsyncByteStream) so httpx streams chunks without buffering the
+    entire file.  Passing raw bytes would require loading the whole file
+    into RAM, causing OOM on constrained containers.
+    """
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    # HEAD says blob does not exist → upload proceeds
+    mock_head = MagicMock()
+    mock_head.status_code = 404
+    mock_client.head = AsyncMock(return_value=mock_head)
+
+    mock_post_resp = MagicMock()
+    mock_post_resp.status_code = 200
+    mock_post_resp.text = "OK"
+    mock_client.post = AsyncMock(return_value=mock_post_resp)
+
+    result = asyncio.run(_upload_blob(mock_client, sample_file))
+
+    # Verify post was called with an async generator (streaming upload)
+    call_kwargs = mock_client.post.call_args
+    content_arg = call_kwargs.kwargs.get("content") or call_kwargs[1].get("content")
+    import types
+
+    assert isinstance(content_arg, types.AsyncGeneratorType), (
+        f"content must be an async generator for streaming upload, got {type(content_arg).__name__}"
+    )
+    assert result.startswith("sha256:")
+
+
+def test_upload_blob_skips_when_exists(sample_file):
+    """When HEAD returns 200, the blob upload is skipped entirely."""
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_head = MagicMock()
+    mock_head.status_code = 200
+    mock_client.head = AsyncMock(return_value=mock_head)
+
+    result = asyncio.run(_upload_blob(mock_client, sample_file))
+
+    # post should NOT be called when blob already exists
+    mock_client.post.assert_not_called()
+    assert result.startswith("sha256:")
+
+
+# ---------------------------------------------------------------------------
+# Tests for _compute_sha256 helper
+# ---------------------------------------------------------------------------
+
+
+def test_compute_sha256_correctness(tmp_path):
+    """_compute_sha256 returns the correct digest for a file."""
+    content = b"\x00\x01\x02" * 100
+    p = tmp_path / "model.gguf"
+    p.write_bytes(content)
+
+    import hashlib as _hl
+
+    expected_digest = f"sha256:{_hl.sha256(content).hexdigest()}"
+    digest = _compute_sha256(str(p))
+
+    assert digest == expected_digest
+
+
+def test_compute_sha256_empty_file(tmp_path):
+    """_compute_sha256 handles an empty file correctly."""
+    p = tmp_path / "empty.gguf"
+    p.write_bytes(b"")
+
+    import hashlib as _hl
+
+    expected_digest = f"sha256:{_hl.sha256(b'').hexdigest()}"
+    digest = _compute_sha256(str(p))
+
+    assert digest == expected_digest
+
+
+def test_upload_blob_uses_to_thread(sample_file):
+    """_upload_blob offloads SHA-256 to a thread pool via asyncio.to_thread."""
+    with patch("app.training.orchestrator.asyncio.to_thread") as mock_to_thread:
+        # Set up the mock to call the real function so we can verify the call
+        mock_to_thread.side_effect = lambda fn, *args, **kwargs: fn(*args, **kwargs)
+
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_head = MagicMock()
+        mock_head.status_code = 200  # Skip upload
+        mock_client.head = AsyncMock(return_value=mock_head)
+
+        asyncio.run(_upload_blob(mock_client, sample_file))
+
+        mock_to_thread.assert_called_once()
+        # Verify it was called with our sync helper function
+        assert mock_to_thread.call_args[0][0] is _compute_sha256

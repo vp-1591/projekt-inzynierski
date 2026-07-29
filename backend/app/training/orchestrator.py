@@ -75,17 +75,33 @@ MODEL_PARAMETERS = {
 }
 
 
-async def _upload_blob(client: httpx.AsyncClient, file_path: str) -> str:
-    """Compute SHA-256 digest of *file_path* and upload it to Ollama.
+def _compute_sha256(file_path: str) -> str:
+    """Compute SHA-256 digest of a file using streaming reads (synchronous).
 
-    If the blob already exists (HTTP 200 from HEAD), the upload is skipped.
-    Returns the digest string in the format ``sha256:<hex>``.
+    Returns digest in the format ``sha256:<hex>``.
+    Designed to be called via ``asyncio.to_thread()`` to avoid blocking
+    the event loop on multi-GB model files.  Uses only ~8 KiB of memory
+    regardless of file size.
     """
     sha256 = hashlib.sha256()
     with open(file_path, "rb") as f:
         for chunk in iter(lambda: f.read(8192), b""):
             sha256.update(chunk)
-    digest = f"sha256:{sha256.hexdigest()}"
+    return f"sha256:{sha256.hexdigest()}"
+
+
+async def _upload_blob(client: httpx.AsyncClient, file_path: str) -> str:
+    """Compute SHA-256 digest of *file_path* and upload it to Ollama.
+
+    If the blob already exists (HTTP 200 from HEAD), the upload is skipped.
+    Returns the digest string in the format ``sha256:<hex>``.
+
+    SHA-256 computation is offloaded to a thread pool via
+    ``asyncio.to_thread()``.  The upload streams the file in 1 MiB chunks,
+    each read via ``asyncio.to_thread()``, so that multi-GB blobs never
+    reside entirely in memory (avoids OOM on constrained containers).
+    """
+    digest = await asyncio.to_thread(_compute_sha256, file_path)
     file_size = os.path.getsize(file_path)
 
     # Check if the blob already exists — skip re-upload for large files.
@@ -95,12 +111,25 @@ async def _upload_blob(client: httpx.AsyncClient, file_path: str) -> str:
         return digest
 
     logging.info("Uploading blob %s (%d bytes) to Ollama", digest[:16], file_size)
-    with open(file_path, "rb") as f:
-        resp = await client.post(
-            f"{OLLAMA_API_URL}/api/blobs/{digest}",
-            content=f,
-            headers={"Content-Type": "application/octet-stream"},
-        )
+
+    # Stream the file in 1 MiB chunks to avoid loading multi-GB blobs
+    # entirely into memory.  Each chunk read is offloaded to the thread
+    # pool so the event loop stays responsive.
+    _CHUNK_SIZE = 1024 * 1024  # 1 MiB
+
+    async def _chunk_generator():
+        with open(file_path, "rb") as f:
+            while True:
+                chunk = await asyncio.to_thread(f.read, _CHUNK_SIZE)
+                if not chunk:
+                    break
+                yield chunk
+
+    resp = await client.post(
+        f"{OLLAMA_API_URL}/api/blobs/{digest}",
+        content=_chunk_generator(),
+        headers={"Content-Type": "application/octet-stream"},
+    )
     if resp.status_code not in (200, 201):
         raise Exception(f"Failed to upload blob {digest[:16]} (HTTP {resp.status_code}): {resp.text[:200]}")
     return digest
@@ -559,7 +588,7 @@ class MLOpsOrchestrator:
 
             adapter_gguf_filename = os.path.basename(found_gguf_path)
 
-            async with httpx.AsyncClient(timeout=httpx.Timeout(300.0)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(900.0)) as client:
                 # Phase 1: Upload blobs to Ollama
                 log_deploy(f"Uploading base model blob: {base_gguf_filename}")
                 base_digest = await _upload_blob(client, base_gguf_path)
