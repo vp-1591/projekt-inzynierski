@@ -1,5 +1,5 @@
 FROM /model/bielik-4.5b-base/Bielik-4.5B-v3.0-Instruct.Q8_0.gguf
-ADAPTER /model/latest/adapter.gguf
+ADAPTER /model/xai-adapter/checkpoint-2475/checkpoint-2475-F32-LoRA.gguf
 
 # 2. Parameters
 PARAMETER temperature 0.1
