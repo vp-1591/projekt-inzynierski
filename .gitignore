@@ -39,7 +39,8 @@ backend/tests/pytest-cache-files-*/
 .venv/
 .venv-wsl/
 /unsloth_compiled_cache
-.claude/
+!.claude/hooks/
+!.claude/hooks/PreToolUse
 _thesis_build
 
 /backend/unsloth_compiled_cache
@@ -49,6 +50,9 @@ _thesis_build
 /backend/logs/
 /model/*
 !/model/Modelfile
+!/model/Modelfile.docker
+!/model/CLAUDE.md
+!/model/ollama-entrypoint.sh
 !/model/benchmark-reports/
 
 # Benchmark reports: ignore root files, allow subfolders (adapters)
@@ -66,3 +70,7 @@ section-*.txt
 # Fonts
 *.ttf
 Inter,Platypi,Source_Serif_4/
+
+# harness artifacts
+tmp/
+PROGRESS.md

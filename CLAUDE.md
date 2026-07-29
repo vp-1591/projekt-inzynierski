@@ -1,75 +1,101 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
-Polish-language disinformation detection system using Explainable AI (XAI). Identifies 11 manipulation techniques in media texts via a fine-tuned Bielik-4.5B LLM with LoRA adapters. The system is an engineering thesis project ("praca inżynierska").
+Polish-language disinformation detection system using Explainable AI (XAI). Identifies 11 manipulation techniques in media texts via a fine-tuned Bielik-4.5B LLM with LoRA adapters. Engineering thesis project ("praca inżynierska").
 
 ## Commands
 
-**Start all services (Windows):** `./run_app.cmd` — launches Ollama, backend, and frontend in separate windows.
+Bash commands are automatically anchored to the repo root by a PreToolUse hook — no `cd` needed before running project commands.
 
-**Manual start:**
+### Docker
 
-- Backend: `cd backend && python -m app.main` (FastAPI on :8000)
-- Frontend: `cd frontend && npm run dev` (Vite on :5173)
+See [DOCKER.md](DOCKER.md) for full details. Quick reference:
 
-**Frontend build/lint:**
+- **Start:** `docker compose up` (dev mode with hot-reload)
+- **Rebuild:** `docker compose build backend` (only when `requirements*.txt` or `Dockerfile` change)
+- **Logs:** `docker compose logs <service>`; training logs at `/app/logs/` inside backend container
+
+### Backend lint/format/test (venv required)
+
+- **Lint:** `cd backend && .venv/Scripts/ruff check app tests`
+- **Format:** `cd backend && .venv/Scripts/ruff format app tests`
+- **Tests:** `cd backend && .venv/Scripts/python -m pytest tests/` (integration tests need `--run-integration`)
+- Config: `backend/ruff.toml` (excludes `vendor/` and `.venv/`)
+
+### Frontend build/lint
 
 - `cd frontend && npm run build`
 - `cd frontend && npm run lint`
 
-**Training (requires WSL2 + NVIDIA GPU):**
-
-- WSL dependencies: `pip install unsloth bitsandbytes accelerate torch trl datasets gguf`
-- Training is triggered via the Expert Mode UI, not CLI directly
-
-**Ollama model setup:**
-
-- `ollama create bielik-4.5b -f ./model/Modelfile`
-- The model name used at runtime is `bielik-lora-mipd:latest` (hardcoded in `backend/app/main.py`)
-
 ## Architecture
 
-```
-Frontend (React/Vite :5173)
-  └── WebSocket + REST ──→ Backend (FastAPI :8000)
-                               ├── /analyze → Ollama (:11434) → Bielik LLM
-                               ├── /ws/training/status → real-time pipeline updates
-                               ├── SQLite (disinfo_system.db) → TrainingRun records
-                               └── /upload, /train, /promote → MLOps pipeline
+```mermaid
+flowchart LR
+  subgraph Frontend
+    UI["React/Vite :5173"]
+  end
+
+  subgraph Backend["Backend (FastAPI :8000)"]
+    API["REST + WebSocket"]
+    ORCH["orchestrator.py"]
+    PROC["llm_processor.py"]
+  end
+
+  subgraph Ollama
+    LLM["Bielik LLM :11434"]
+  end
+
+  subgraph Storage
+    DB["SQLite<br/>disinfo_system.db"]
+    MODEL["model/<br/>GGUF + LoRA"]
+  end
+
+  UI -- "REST + WS" --> API
+  API -- "/analyze" --> LLM
+  LLM -- "raw response" --> PROC
+  PROC -- "healed JSON" --> UI
+  API -- "training status WS" --> UI
+  ORCH -- "upload/train/promote" --> API
+  ORCH -- "deploy via Ollama API" --> LLM
+  ORCH -- "TrainingRun records" --> DB
+  ORCH -- "adapters + datasets" --> MODEL
 ```
 
-**Data flow for analysis:** User text → Frontend → FastAPI `/analyze` → Ollama `/api/chat` → LLM response → `llm_processor.normalize_llm_response()` (3-phase healing: JSON parse → schema normalization → tag validation) → structured result to frontend.
+### Key flows
 
-**MLOps pipeline (orchestrator.py):** Upload `.jsonl` → trainer.py (Unsloth SFT in WSL2) → benchmark.py (evaluation on mipd_test.jsonl) → converter.py (HF→GGUF) → hot-swap via Ollama CLI. Progress is reported through callbacks → WebSocket broadcast.
+- **Analysis:** Frontend → `/analyze` → Ollama `/api/chat` → LLM → `normalize_llm_response()` (3-phase healing: JSON parse → schema normalization → tag validation) → structured result
+- **MLOps pipeline:** Upload `.jsonl` → trainer.py (Unsloth SFT) → benchmark.py → converter.py (HF→GGUF) → hot-swap via Ollama HTTP API (`/api/create`). Progress via callbacks → WebSocket broadcast.
 
 ## Key Design Decisions
 
-- **LLM response healing** (`backend/app/llm_processor.py`): The 4.5B model often outputs malformed JSON. A 3-phase pipeline (JSON parse → regex recovery → fuzzy key/tag normalization) handles this. Any changes to the output schema must update both `VALID_TAGS` and the regex patterns.
+- **LLM response healing** (`llm_processor.py`): 3-phase pipeline (JSON parse → regex recovery → fuzzy normalization). Changes to output schema must update both `VALID_TAGS` and regex patterns.
 
-- **11 valid technique tags** are defined in both `backend/app/llm_processor.py` (`VALID_TAGS` set) and `frontend/src/services/disinformationDetector.js` (`TECHNIQUE_MAPPING`). These must stay in sync.
+- **11 technique tags** defined in `backend/app/llm_processor.py` (`VALID_TAGS`) and `frontend/src/services/disinformationDetector.js` (`TECHNIQUE_MAPPING`) — **must stay in sync**.
 
-- **Ollama Modelfile** (`model/Modelfile`) uses ChatML template (`<|im_start|>`, `<|im_end|>`) — critical for Bielik model. The system prompt defines the exact JSON output format and allowed technique categories.
+- **Ollama Modelfile** (`model/Modelfile`) uses ChatML template (`<|im_start|>`, `<|im_end|>`) — critical for Bielik. System prompt defines JSON output format and allowed technique categories.
 
-- **Training runs only in WSL2**: Unsloth requires Linux. The backend detects `os.name == 'nt'` and warns. The `ProgressCallback` in trainer.py POSTs progress back to the Windows backend at `http://localhost:8000/training/progress`.
+- **Training runs inside Docker backend container** (GPU passthrough). `ProgressCallback` POSTs progress to `{BACKEND_URL}/training/progress` (`http://backend:8000` in Docker).
 
-- **Baseline metrics** are read from `model/benchmark-reports/current_baseline_report.txt` via regex parsing in `orchestrator.py`.
+- **Unsloth tokenizer pickling** (`trainer.py`): `Dataset.map(num_proc=N)` crashes for `N > 1` due to `ConfigModuleInstance`. Module-level monkey-patch forces `num_proc=None`. Do NOT set `dataset_num_proc` in `SFTConfig`.
+
+- **Ollama deployment via HTTP API** (v0.5.5+): `deploy_new_adapter()` uses a two-phase approach: (1) upload GGUF files as blobs via `POST /api/blobs/{sha256_digest}` with deduplication via `HEAD` check, then (2) call `POST /api/create` with JSON fields (`files`, `adapters`, `template`, `system`, `parameters`) — not a Modelfile string. Requires Ollama v0.5.5+. See `model/CLAUDE.md` for format details. Streaming NDJSON responses are parsed for error detection.
+
+- **Baseline metrics** read from `model/benchmark-reports/current_baseline_report.txt` via regex in `orchestrator.py`.
 
 ## Environment
 
-- Git submodule: `backend/vendor/llama.cpp` (run `git submodule update --init --recursive`)
-- Database: SQLite file `backend/disinfo_system.db`
+- Git submodule: `backend/vendor/llama.cpp` (`git submodule update --init --recursive`)
+- Database: `backend/disinfo_system.db` (SQLite)
 - Test dataset: `model/dataset/mipd_test.jsonl` (1521 documents)
 - Model files: `model/bielik-4.5b-base/` (GGUF base), `model/xai-adapter/` (production LoRA)
 
 ## UI Language
 
-The entire UI and system prompts are in Polish. Technique names displayed to users are Polish translations of the English tags (e.g., `STRAWMAN` → "Chochoł (Słomiana kukła)").
+Entire UI and system prompts are in Polish. Technique names are Polish translations (e.g., `STRAWMAN` → "Chochoł (Słomiana kukła)").
 
-## Git Commits
+## User Language
 
-Do not add "Co-Authored-By: Claude ..." or any AI attribution lines to commit messages.
+Respond in the same language as user query. Default: English.
 
 @~/.claude/shared/adr-workflow.md

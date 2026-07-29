@@ -1,0 +1,30 @@
+# Production override — use with: docker compose -f docker-compose.yml -f docker-compose.prod.yml up
+#
+# Key differences from dev:
+# - Frontend uses nginx to serve production build (port 80 instead of 5173)
+# - Source volume mounts removed (image contains built assets)
+# - Backend runs from image (no live code reload)
+
+services:
+  backend:
+    build:
+      target: runtime
+    # Production: no --reload, no debugpy
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--ws", "websockets"]
+    ports: !override
+      - "8000:8000"
+    # Remove dev source mount — keep only data volumes
+    volumes: !override
+      - ./model:/app/model
+      - backend_uploads:/app/uploads
+      - backend_logs:/app/logs
+
+  frontend:
+    build:
+      target: production
+      args:
+        VITE_BACKEND_URL: /api
+    ports: !override
+      - "80:80"
+    # Remove dev source mounts — image contains built static assets
+    volumes: !override []

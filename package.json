@@ -7,6 +7,6 @@
     "dev": "npx concurrently \"cd frontend && npm run dev\" \"cd backend && python -m app.main\""
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "8.2.2"
   }
 }

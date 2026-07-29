@@ -1,0 +1,3 @@
+# Dev/test dependencies — not needed in production or Docker image
+pytest==9.1.1
+ruff==0.16.0

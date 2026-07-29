@@ -1,0 +1,100 @@
+services:
+  ollama:
+    image: ollama/ollama:0.32.4
+    container_name: ollama-service
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/model/ollama-entrypoint.sh"]
+    ports:
+      - "11435:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./model:/model
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list | grep bielik-lora-mipd || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: dev
+    restart: unless-stopped
+    container_name: backend-service
+    # Decision: docs/adr/0001-docker-dev-env-hot-reload.md
+    # --reload enables hot-reload; --reload-dir limits watching to app code only.
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--ws", "websockets", "--reload", "--reload-dir", "/app/app"]
+    ports:
+      - "8000:8000"
+      - "5678:5678"  # debugpy remote debugging
+    environment:
+      - OLLAMA_URL=http://ollama:11434/api/chat
+      - OLLAMA_API_URL=http://ollama:11434
+      - PYTHONUNBUFFERED=1
+      - BACKEND_HOST=backend
+      - BACKEND_PORT=8000
+    volumes:
+      - ./backend:/app
+      - ./model:/app/model
+      - backend_uploads:/app/uploads
+      - backend_logs:/app/logs
+    depends_on:
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+    restart: unless-stopped
+    container_name: frontend-service
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+volumes:
+  ollama_data:
+    driver: local
+  backend_uploads:
+    driver: local
+  backend_logs:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

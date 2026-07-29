@@ -2,11 +2,14 @@ import { useState, useEffect } from 'react'
 import './index.css'
 import { InputSection } from './components/InputSection'
 import { analyzeText } from './services/disinformationDetector'
+import { BACKEND_URL } from './config'
 
 function App() {
   const [results, setResults] = useState(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [error, setError] = useState(null)
+  const [connected, setConnected] = useState(false);
+  const [wsError, setWsError] = useState(null);
   const [showExpertMode, setShowExpertMode] = useState(false)
   const [trainingStatus, setTrainingStatus] = useState({
     status: 'idle',
@@ -19,26 +22,61 @@ function App() {
   });
 
   useEffect(() => {
+    if (!showExpertMode) return;
+
     let ws = null;
-    if (showExpertMode) {
-      ws = new WebSocket('ws://localhost:8000/ws/training/status');
-      
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        setTrainingStatus(data);
+    let retryTimeout = null;
+    let retryDelay = 3000;
+    const maxRetryDelay = 30000;
+    const mountedRef = { current: true };
+
+    function connect() {
+      // In production (BACKEND_URL is relative like "/api"), use the current host;
+      // in development (absolute URL like "http://localhost:8000"), strip the protocol.
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsHost = BACKEND_URL.startsWith('http')
+        ? BACKEND_URL.replace(/^https?:\/\//, '')
+        : window.location.host;
+      ws = new WebSocket(`${wsProtocol}//${wsHost}/ws/training/status`);
+
+      ws.onopen = () => {
+        setConnected(true);
+        setWsError(null);
+        retryDelay = 3000; // reset backoff on successful connection
       };
 
-      ws.onerror = (err) => {
-        console.error("WebSocket error:", err);
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'heartbeat') return;  // Ignore server keepalive pings
+          setTrainingStatus(data);
+        } catch {
+          setWsError('Otrzymano nieprawidłowe dane z serwera');
+        }
+      };
+
+      ws.onerror = () => {
+        setConnected(false);
+        setWsError('Błąd połączenia z serwerem');
       };
 
       ws.onclose = () => {
-        console.log("WebSocket connection closed");
+        setConnected(false);
+        ws = null;
+        if (!mountedRef.current) return;
+        retryTimeout = setTimeout(() => {
+          retryDelay = Math.min(retryDelay * 2, maxRetryDelay);
+          connect();
+        }, retryDelay);
       };
     }
 
+    connect();
+
     return () => {
+      mountedRef.current = false;
       if (ws) ws.close();
+      if (retryTimeout) clearTimeout(retryTimeout);
     };
   }, [showExpertMode]);
 
@@ -50,12 +88,12 @@ function App() {
     formData.append('file', file);
 
     try {
-      const response = await fetch('http://localhost:8000/training/upload', {
+      const response = await fetch(`${BACKEND_URL}/training/upload`, {
         method: 'POST',
         body: formData,
       });
       if (response.ok) {
-        const statusResponse = await fetch('http://localhost:8000/training/status');
+        const statusResponse = await fetch(`${BACKEND_URL}/training/status`);
         if (statusResponse.ok) {
           setTrainingStatus(await statusResponse.json());
         }
@@ -79,7 +117,7 @@ function App() {
     }
     
     try {
-      const response = await fetch('http://localhost:8000/training/promote', { method: 'POST' });
+      const response = await fetch(`${BACKEND_URL}/training/promote`, { method: 'POST' });
       if (response.ok) {
         // Success feedback is handled by button state "Wdrażanie..." -> "Wdróż model" transition
       }
@@ -122,8 +160,8 @@ function App() {
               <span>{trainingStatus.training_progress}%</span>
             </div>
             <div className="progress-bar">
-              <div 
-                className="progress-fill" 
+              <div
+                className={`progress-fill${trainingStatus.status === 'training' ? ' progress-fill--active' : ''}`}
                 style={{ width: `${trainingStatus.training_progress}%` }}
               ></div>
             </div>
@@ -172,30 +210,34 @@ function App() {
               disabled={trainingStatus.status !== 'ready_to_promote'}
               className="promote-button"
             >
-              {trainingStatus.status === 'deploying' ? 'Wdrażanie...' : 
-               trainingStatus.status === 'deployment_success' ? 'Wdrożono' : 
-               trainingStatus.status === 'deployment_error' ? 'Błąd!' : 'Wdróż model'}
+              {trainingStatus.status === 'deploying' ? 'Wdrażanie...' :
+               trainingStatus.status === 'deployment_success' ? 'Wdrożono' :
+               trainingStatus.status === 'deployment_error' ? 'Błąd!' :
+               trainingStatus.status === 'training_error' ? 'Błąd treningu' : 'Wdróż model'}
             </button>
             
             {/* Status Indicator Circle */}
-            <div 
-              title={`Status: ${trainingStatus.status}`}
+            <div
+              title={!connected ? 'Status: rozłączono' : `Status: ${trainingStatus.status}`}
               style={{
-                width: '16px', 
-                height: '16px', 
+                width: '16px',
+                height: '16px',
                 borderRadius: '50%',
-                backgroundColor: (() => {
+                backgroundColor: !connected ? 'transparent' : (() => {
                   switch (trainingStatus.status) {
-                    case 'deploying': return '#fbbf24'; // Yellow
-                    case 'deployment_success': return '#10b981'; // Green
-                    case 'deployment_error': return '#ef4444'; // Red
-                    case 'ready_to_promote': return '#3b82f6'; // Blue
-                    default: return '#9ca3af'; // Gray
+                    case 'deploying': return '#fbbf24';
+                    case 'deployment_success': return '#10b981';
+                    case 'deployment_error': return '#ef4444';
+                    case 'training_error': return '#ef4444';
+                    case 'ready_to_promote': return '#3b82f6';
+                    default: return '#9ca3af';
                   }
                 })(),
-                transition: 'background-color 0.3s ease'
+                border: !connected ? '2px solid #f97316' : 'none',
+                transition: 'background-color 0.3s ease, border 0.3s ease'
               }}
             ></div>
+            {!connected && <span className="connection-lost-text">Brak połączenia</span>}
           </div>
         </div>
       </aside>
@@ -226,6 +268,16 @@ function App() {
           {error && (
             <div className="error-message">
               {error}
+            </div>
+          )}
+
+          {wsError && (
+            <div className="error-message">{wsError}</div>
+          )}
+
+          {trainingStatus.status === 'training_error' && (
+            <div className="training-error-banner">
+              Trening zakończył się błędem. Sprawdź logi i spróbuj ponownie.
             </div>
           )}
 
